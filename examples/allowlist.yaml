@@ -1,0 +1,65 @@
+version: 1
+
+project:
+  name: locked-down-app
+  workdir: /workspace
+  state_dir: .microcode
+
+# Demonstrates the allowlist (deny-by-default) network mode: the VM may only
+# reach the explicitly allow-listed hosts, everything else is blocked.
+skills:
+  registry:
+    sources: [anthropics/skills]
+  install:
+    - source: anthropics/skills
+      skills: []
+      agents: [claude-code]
+  translate:
+    target_agent: claude-code
+    output_dir: skills
+
+loki:
+  provider: claude
+  max_iterations: 10
+  max_budget_usd: 5.0
+  effort: standard
+  provider_clis: [claude]
+
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: loki-build
+  cpus: 2
+  memory: 2048
+  network:
+    mode: allowlist                 # deny-by-default; only `allow` rules pass
+    default_egress: deny
+    allow:
+      # loki + provider model access
+      - { action: allow, target: api.anthropic.com, proto: tcp, port: 443 }
+      # package/registry fetches during bootstrap.sh
+      - { action: allow, target: deb.nodesource.com, proto: tcp, port: 443 }
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: bun.sh, proto: tcp, port: 443 }
+      # apt mirrors (debian)
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      # github (skills sources / git)
+      - { action: allow, target: github.com, proto: tcp, port: 443 }
+      - { action: allow, target: "*.githubusercontent.com", proto: tcp, port: 443 }
+    # explicit denies are still honored on top of the allow-list
+    deny_domain_suffixes:
+      - telemetry.example.com
+  init:
+    packages:
+      apt: [curl, git, ca-certificates, python3, python3-pip]
+      npm_global: [loki-mode, "@skillkit/cli"]
+      bun: true
+      node_version: "22"
+  secrets:
+    - env: ANTHROPIC_API_KEY
+      allow_hosts: [api.anthropic.com]
+  mounts:
+    - host: ./src
+      dest: /workspace
+      readonly: false
+  ports: [57374:57374]

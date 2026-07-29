@@ -1,0 +1,51 @@
+version: 1
+
+project:
+  name: minimal-app
+  workdir: /workspace
+  state_dir: .microcode
+
+skills:
+  registry:
+    sources: [anthropics/skills]
+  install:
+    - source: anthropics/skills
+      skills: []
+      agents: [claude-code]
+  translate:
+    target_agent: claude-code
+    output_dir: skills
+    also_into_memory: true
+
+loki:
+  provider: cline
+  max_iterations: 10
+  max_budget_usd: 5.0
+  effort: standard
+  sdk_mode: full
+  provider_clis: [cline]
+
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: loki-build
+  cpus: 2
+  memory: 2048
+  network:
+    profile: [public]
+  init:
+    packages:
+      apt: [curl, git, ca-certificates, python3, python3-pip]
+      npm_global: [loki-mode, "@skillkit/cli"]
+      bun: true
+      node_version: "22"
+    snapshot:
+      enabled: false
+  secrets:
+    - env: ANTHROPIC_API_KEY
+      allow_hosts: [api.anthropic.com]
+  mounts:
+    - host: ./src
+      dest: /workspace
+      readonly: false
+  ports: [57374:57374]

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# venvs
+.venv/
+venv/
+
+# microcode generated state
+.microcode/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

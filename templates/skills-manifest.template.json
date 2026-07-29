@@ -1,0 +1,12 @@
+{
+  "skills": [
+    {
+      "source": "anthropics/skills",
+      "enabled": true,
+      "skills": [],
+      "agents": ["claude-code"]
+    }
+  ],
+  "agents": ["claude-code"],
+  "installMethod": "copy"
+}

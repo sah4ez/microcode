@@ -1,0 +1,88 @@
+version: 1
+
+project:
+  name: todo-service
+  workdir: /workspace
+  state_dir: .microcode
+
+# Skills already installed into ./src/.cline/skills via skillkit (obra/superpowers,
+# translated for the cline agent). They are visible inside the VM via the mount
+# below. We keep the skills section minimal because provisioning already happened.
+skills:
+  registry:
+    sources: [obra/superpowers]
+  install: []
+  translate:
+    target_agent: cline
+    output_dir: src/.cline/skills
+    also_into_memory: false
+
+loki:
+  provider: cline               # loki drives the cline CLI as its provider
+  max_iterations: 15
+  max_budget_usd: 5.0
+  effort: standard
+  sdk_mode: full
+  quality_gates:
+    enabled: true
+    opt_out: []
+  memory:
+    enabled: true
+    managed: false
+  proofs:
+    enabled: false
+  provider_clis: [cline]        # install cline CLI inside the VM via bootstrap
+
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: loki-build
+  cpus: 2
+  memory: 2048
+  network:
+    # allowlist: VM may only reach z.ai (GLM) + package registries for bootstrap.
+    mode: allowlist
+    default_egress: deny
+    allow:
+      - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
+      - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      # package/registry fetches during bootstrap.sh
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: security.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: deb.nodesource.com, proto: tcp, port: 443 }
+      - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: bun.sh, proto: tcp, port: 443 }
+      - { action: allow, target: pypi.org, proto: tcp, port: 443 }
+      - { action: allow, target: files.pythonhosted.org, proto: tcp, port: 443 }
+  init:
+    packages:
+      apt: [curl, git, ca-certificates, python3, python3-pip, python3-venv]
+      npm_global: [loki-mode]
+      bun: true
+      node_version: "22"
+      # configure cline inside the VM to use the GLM/z.ai provider.
+      # GLM_API_KEY is injected from the host env (sandbox.env) — never inlined.
+      extra_shell: |
+        # install cline CLI
+        npm install -g @anthropic-ai/cline 2>/dev/null || true
+        # configure the z.ai / GLM provider non-interactively
+        if command -v cline >/dev/null 2>&1; then
+          cline auth zai-coding-plan \
+            --apikey "${GLM_API_KEY}" \
+            --modelid glm-5.2 \
+            --data-dir "${HOME}/.cline" || true
+        fi
+    snapshot:
+      enabled: false
+  # GLM token referenced by name; real value comes from the host environment.
+  # It is passed into the VM via env (cline reads it during bootstrap auth).
+  env:
+    GLM_API_KEY: "${GLM_API_KEY}"
+  mounts:
+    # the whole working dir (skills + src + state) is visible inside the VM
+    - host: .
+      dest: /workspace
+      readonly: false
+  ports: [8000:8000, 57374:57374]
+  user: root

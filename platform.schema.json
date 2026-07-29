@@ -1,0 +1,231 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://microcode.dev/schemas/platform.schema.json",
+  "title": "PlatformManifest",
+  "description": "Unified IaC manifest for skillkit + loki-mode + microsandbox.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "workdir": { "type": "string" },
+        "state_dir": { "type": "string" }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": { "type": "array", "items": { "type": "string" } },
+            "taps": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "install": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source"],
+            "properties": {
+              "source": { "type": "string" },
+              "skills": { "type": "array", "items": { "type": "string" } },
+              "agents": { "type": "array", "items": { "type": "string" } },
+              "provider": {
+                "type": "string",
+                "enum": ["github", "gitlab", "bitbucket", "local", "gist", "marketplace"]
+              }
+            }
+          }
+        },
+        "translate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "target_agent": { "type": "string" },
+            "output_dir": { "type": "string" },
+            "also_into_memory": { "type": "boolean" },
+            "force": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "loki": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "enum": ["claude", "codex", "cline", "aider"] },
+        "max_iterations": { "type": "integer", "minimum": 1 },
+        "max_budget_usd": { "type": "number", "minimum": 0 },
+        "effort": { "type": "string", "enum": ["low", "standard", "high"] },
+        "sdk_mode": { "type": "string", "enum": ["full", "minimal"] },
+        "quality_gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "opt_out": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "managed": { "type": "boolean" }
+          }
+        },
+        "proofs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean" } }
+        },
+        "config_overrides": { "type": "object" },
+        "provider_clis": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string" },
+        "tag": { "type": "string" },
+        "name": { "type": "string" },
+        "cpus": { "type": "integer", "minimum": 1 },
+        "memory": { "type": "integer", "minimum": 128 },
+        "max_cpus": { "type": ["integer", "null"] },
+        "max_memory": { "type": ["integer", "null"] },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["profile", "allowlist", "denylist"],
+              "description": "profile=compose egress via --net; allowlist=deny-by-default + allow rules; denylist=allow-by-default + deny rules"
+            },
+            "profile": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["public", "private", "host", "all", "none"] }
+            },
+            "default_egress": { "type": "string", "enum": ["allow", "deny"] },
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["action", "target"],
+                "properties": {
+                  "action": { "type": "string", "enum": ["allow", "deny"] },
+                  "target": {
+                    "type": "string",
+                    "description": "domain, IP, CIDR, *.suffix, or group (public/private/host/any/dns/...)"
+                  },
+                  "proto": { "type": "string", "enum": ["any", "tcp", "udp", "icmpv4", "icmpv6"] },
+                  "port": { "type": ["integer", "string"], "description": "port or 'lo-hi' range" },
+                  "direction": { "type": "string", "enum": ["egress", "ingress", "any"] }
+                }
+              }
+            },
+            "deny": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["action", "target"],
+                "properties": {
+                  "action": { "type": "string", "enum": ["allow", "deny"] },
+                  "target": { "type": "string" },
+                  "proto": { "type": "string", "enum": ["any", "tcp", "udp", "icmpv4", "icmpv6"] },
+                  "port": { "type": ["integer", "string"] },
+                  "direction": { "type": "string", "enum": ["egress", "ingress", "any"] }
+                }
+              }
+            },
+            "deny_domains": { "type": "array", "items": { "type": "string" } },
+            "deny_domain_suffixes": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "domain suffixes to deny, e.g. 'example.com' -> *.example.com"
+            }
+          }
+        },
+        "init": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "packages": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "apt": { "type": "array", "items": { "type": "string" } },
+                "npm_global": { "type": "array", "items": { "type": "string" } },
+                "bun": { "type": "boolean" },
+                "node_version": { "type": "string" },
+                "extra_shell": { "type": "string" }
+              }
+            },
+            "snapshot": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "name": { "type": "string" }
+              }
+            }
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["env", "allow_hosts"],
+            "properties": {
+              "env": { "type": "string" },
+              "allow_hosts": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "dest"],
+            "properties": {
+              "name": { "type": "string" },
+              "dest": { "type": "string" },
+              "kind": { "type": "string", "enum": ["dir", "disk"] },
+              "size": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "mounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["host", "dest"],
+            "properties": {
+              "host": { "type": "string" },
+              "dest": { "type": "string" },
+              "readonly": { "type": "boolean" }
+            }
+          }
+        },
+        "ports": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "user": { "type": "string" }
+      }
+    }
+  }
+}
