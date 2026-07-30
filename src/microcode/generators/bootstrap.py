@@ -199,12 +199,16 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "echo '[bootstrap] unprivileged user'",
         "id loki >/dev/null 2>&1 || useradd -m -s /bin/bash loki",
         # expose npm-global tools to all users via a shared /opt prefix
-        "mkdir -p /opt/npm-global",
+        "mkdir -p /opt/npm-global/bin /opt/npm-global/lib",
         "cp -a /root/.npm-global/lib /opt/npm-global/lib 2>/dev/null || true",
-        "cp -a /root/.npm-global/bin /opt/npm-global/bin 2>/dev/null || true",
+        "cp -a /root/.npm-global/bin/. /opt/npm-global/bin/ 2>/dev/null || true",
         "chmod -R a+rX /opt/npm-global",
+        # also expose bun-global binaries (bun install -g puts them in ~/.bun/bin)
+        "if [ -d /root/.bun/bin ]; then",
+        "  cp -a /root/.bun/bin/. /opt/npm-global/bin/ 2>/dev/null || true",
+        "fi",
         # re-link common CLIs so non-root users can call them
-        "for b in loki cline claude skillkit; do",
+        "for b in loki cline claude skillkit sk; do",
         "  [ -e /opt/npm-global/bin/$b ] || ln -sf /opt/npm-global/lib/node_modules/*/bin/$b /opt/npm-global/bin/$b 2>/dev/null || true",
         "done",
         # ensure the loki user's login shell can find all installed tools
