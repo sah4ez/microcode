@@ -110,6 +110,12 @@ def apply(
             SkillkitRunner(cwd=str(root)).run([["msb", "rm", "-f", m.sandbox.name]])
         except RunnerError:
             pass  # tolerate "not found"
+        # Fallback: msb 0.6.8 may leave a hidden sandbox dir that msb rm/list
+        # don't see but msb create rejects. Purge it directly.
+        import os as _os, shutil as _sh
+        stale = _os.path.expanduser(f"~/.microsandbox/sandboxes/{m.sandbox.name}")
+        if _os.path.exists(stale):
+            _sh.rmtree(stale, ignore_errors=True)
     logging_utils.step("Provisioning sandbox (microsandbox)")
     SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
         plan.sandbox_commands, dry_run=dry_run

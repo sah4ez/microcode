@@ -166,6 +166,15 @@ def build(
                 SkillkitRunner(cwd=str(root)).run([rm])
             except MicrocodeError:
                 pass  # tolerate "not found"
+            # Fallback: msb 0.6.8 sometimes leaves a hidden sandbox dir that
+            # msb rm -f / msb list don't see, but msb create still rejects.
+            # Purge it from the msb data dir directly.
+            import os
+            msb_dir = os.path.expanduser("~/.microsandbox/sandboxes")
+            stale = os.path.join(msb_dir, m.sandbox.name)
+            if os.path.exists(stale):
+                import shutil
+                shutil.rmtree(stale, ignore_errors=True)
         logging_utils.step("Creating sandbox + bootstrapping + snapshot")
         SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
             plan.sandbox_commands, dry_run=dry_run
