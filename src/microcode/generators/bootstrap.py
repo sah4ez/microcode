@@ -198,10 +198,18 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "",
         "echo '[bootstrap] unprivileged user'",
         "id loki >/dev/null 2>&1 || useradd -m -s /bin/bash loki",
-        # expose npm-global tools to all users via a shared /opt prefix
-        "mkdir -p /opt/npm-global/bin /opt/npm-global/lib",
-        "cp -a /root/.npm-global/lib /opt/npm-global/lib 2>/dev/null || true",
-        "cp -a /root/.npm-global/bin/. /opt/npm-global/bin/ 2>/dev/null || true",
+        # expose npm-global tools to all users via a shared /opt prefix.
+        # NOTE: copy CONTENTS (/. not the dir itself) to avoid nesting
+        # lib/lib; and re-link bins via readlink -f (npm bins may be relative).
+        "mkdir -p /opt/npm-global/bin /opt/npm-global/lib/node_modules",
+        "cp -a /root/.npm-global/lib/node_modules/. /opt/npm-global/lib/node_modules/ 2>/dev/null || true",
+        "for f in /root/.npm-global/bin/*; do",
+        "  [ -e \"$f\" ] || continue",
+        "  name=$(basename \"$f\")",
+        "  real=$(readlink -f \"$f\") || real=\"$f\"",
+        "  [ -n \"$real\" ] && [ -e \"$real\" ] || continue",
+        "  ln -sf \"$real\" /opt/npm-global/bin/$name",
+        "done",
         "chmod -R a+rX /opt/npm-global",
         # expose bun-global binaries. bun install -g puts RELATIVE symlinks in
         # ~/.bun/bin pointing at ~/.bun/install/global/node_modules/<pkg>/dist/...
@@ -216,11 +224,7 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "    ln -sf \"$real\" /opt/npm-global/bin/$name",
         "  done",
         "fi",
-        # re-link common npm CLIs so non-root users can call them (npm puts bins
-        # under lib/node_modules/<pkg>/bin/). Use a resolved path, NOT a glob.
-        "for b in loki cline claude; do",
-        "  [ -e /opt/npm-global/bin/$b ] || ln -sf /opt/npm-global/lib/node_modules/*/bin/$b /opt/npm-global/bin/$b 2>/dev/null || true",
-        "done",
+        # (npm + bun bins are both linked above via readlink -f; no glob fallback)
         # ensure the loki user's login shell can find all installed tools
         "LOKI_BASHRC=/home/loki/.bashrc",
         "grep -q 'npm-global/bin' \"$LOKI_BASHRC\" 2>/dev/null || "
