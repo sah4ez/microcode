@@ -137,6 +137,12 @@ def apply(
             logging_utils.step(f"Seeding volume {guest_dest} from {src}")
             try:
                 runner.run([["msb", "cp", str(src), f"{m.sandbox.name}:{guest_dest}"]])
+                # named volumes are owned by root; chown to the unprivileged
+                # user so skillkit/loki can write (.cline/skills, .loki/, etc.)
+                runner.run([[
+                    "msb", "exec", m.sandbox.name, "--user", "root", "--",
+                    "chown", "-R", "loki:loki", guest_dest,
+                ]])
             except RunnerError as e:
                 logging_utils.warn(f"could not seed {guest_dest}: {e}")
 
