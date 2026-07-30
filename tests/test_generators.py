@@ -286,6 +286,7 @@ def test_sandbox_snapshot_adds_stop_then_snapshot_command():
     assert len(res.commands) == 4
     assert res.commands[2][:3] == ["msb", "stop", "loki-build"]
     assert res.commands[3][:4] == ["msb", "snapshot", "create", "s1"]
+    assert "--force" in res.commands[3]  # overwrite an existing snapshot on re-build
 
 
 def test_sandbox_from_snapshot_boots_via_msb_run_and_skips_bootstrap():

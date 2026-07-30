@@ -86,7 +86,7 @@ def _init_argv(m: PlatformManifest, bootstrap_guest: str) -> list[str]:
 def _snapshot_argv(m: PlatformManifest) -> list[str]:
     return [
         "msb", "snapshot", "create", m.sandbox.init.snapshot.name,
-        "--from", m.sandbox.name,
+        "--from", m.sandbox.name, "--force",
     ]
 
 
