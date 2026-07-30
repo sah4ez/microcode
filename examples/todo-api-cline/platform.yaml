@@ -1,0 +1,128 @@
+# ============================================================================
+# microcode — пример: todo-сервис через provider cline + GLM (z.ai)
+# ----------------------------------------------------------------------------
+# Полноценный end-to-end сценарий:
+#   1. microcode поднимает debian-микро-VM (microsandbox) с allowlist-сетью
+#   2. bootstrap.sh ставит node, loki-mode, cline и настраивает node-shim
+#      (cline на arm64 VM падает на Bun; shim запускает cline через @cline/core)
+#   3. loki-mode запускается ВНУТРИ VM с --provider cline и OAuth z.ai (GLM)
+#   4. loki читает PRD (src/PRD.md) и строит todo-сервис в смонтированном src/
+#   5. cross-project память loki живёт в персистентном volume (между запусками)
+#
+# Запуск:
+#   cd examples/todo-api-cline
+#   export GLM_API_KEY=... ZAI_BUSINESS_BASE_URL=... \
+#          ZAI_OAUTH_CLIENT_ID=... ZAI_OAUTH_ORIGIN=...
+#   microcode plan    platform.yaml --prd src/PRD.md   # посмотреть план
+#   microcode apply   platform.yaml --prd src/PRD.md   # выполнить
+#   microcode destroy platform.yaml                     # снести
+# ============================================================================
+
+version: 1
+
+project:
+  name: todo-api
+  workdir: /workspace          # рабочая директория внутри VM
+  state_dir: .microcode        # куда microcode складывает артефакты
+
+# --- НАВЫКИ ---------------------------------------------------------------
+# Скиллы obra/superpowers — аналоги доменов loki-mode (планирование, TDD,
+# дебаггинг, code-review). Переводятся под целевого агента (cline).
+# В этом примере skills.enabled=false: скиллы уже установлены в src/.cline/skills
+# через `skillkit install obra/superpowers --agent cline`. Если ставить с нуля —
+# уберите enabled:false и заполните install.
+skills:
+  enabled: false
+  registry:
+    sources: [obra/superpowers]
+  install: []
+  translate:
+    target_agent: cline
+    output_dir: src/.cline/skills
+    also_into_memory: false
+
+# --- ОРКЕСТРАЦИЯ (loki-mode) ----------------------------------------------
+loki:
+  provider: cline             # loki вызывает cline CLI (через node-shim в VM)
+  max_iterations: 15
+  max_budget_usd: 5.0
+  effort: standard
+  sdk_mode: full
+  quality_gates:
+    enabled: true
+    opt_out: []
+  memory:
+    enabled: true
+    managed: true
+    # ВНЕШНЯЯ ПАМЯТЬ: loki пишет learnings в смонтированный named-volume,
+    # поэтому они переживают destroy/recreate VM.
+    storage:
+      enabled: true
+      volume: loki-memory
+      dest: /data/loki-memory
+  proofs:
+    enabled: false
+  # CLI провайдеров, которые bootstrap ставит в VM.
+  provider_clis: [cline]
+
+# --- СРЕДА ИСПОЛНЕНИЯ (microsandbox) --------------------------------------
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: loki-build
+  cpus: 2
+  memory: 2048                 # MiB
+
+  # СЕТЬ: allowlist (запрет по умолчанию). VM может ходить только к z.ai (GLM)
+  # и к package-registry для bootstrap.sh. Всё остальное заблокировано.
+  network:
+    mode: allowlist
+    default_egress: deny
+    allow:
+      # провайдер LLM (z.ai / GLM) — OAuth endpoint cline
+      - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
+      - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      # apt-зеркала (http+https — bookworm использует оба)
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 80 }
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: security.debian.org, proto: tcp, port: 80 }
+      - { action: allow, target: security.debian.org, proto: tcp, port: 443 }
+      # node/npm/cline — установка в bootstrap.sh
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+      - { action: allow, target: bun.sh, proto: tcp, port: 443 }
+
+  # INIT: что ставит bootstrap.sh внутри VM.
+  # node ставится через debian-nodejs + npm-tarball + `n` (nodejs.org direct
+  # ненадёжен в VM). cline ставится через npm; bootstrap сам создаёт wrapper
+  # /usr/local/bin/cline -> node-shim (cline native падает на arm64 Bun).
+  init:
+    packages:
+      apt: [curl, git, ca-certificates, python3, python3-pip, unzip]
+      npm_global: [loki-mode]
+      bun: true
+      node_version: "22"       # ставится через `n`, нужно >=22.15
+      extra_shell: |
+        # cline auth не нужен: node-shim использует встроенный zai-coding-plan
+        # провайдер cline с OAuth через ZAI_OAUTH_* env.
+    snapshot:
+      enabled: false           # true — кэшировать установленное окружение
+
+  # СЕКРЕТЫ передаются по ИМЕНИ env-переменной; реальные значения читаются
+  # из хост-окружения (в манифесте их НЕТ). loki_runner пробрасывает их в VM
+  # через `msb exec -e`. Для z.ai нужно 4 переменных (см. loki_runner).
+  env:
+    GLM_API_KEY: "${GLM_API_KEY}"
+    ZAI_BUSINESS_BASE_URL: "${ZAI_BUSINESS_BASE_URL}"
+    ZAI_OAUTH_CLIENT_ID: "${ZAI_OAUTH_CLIENT_ID}"
+    ZAI_OAUTH_ORIGIN: "${ZAI_OAUTH_ORIGIN}"
+
+  # МОНТИРОВАНИЕ: вся рабочая папка (skills + src + PRD + стейт) видна в VM.
+  # loki пишет результат в src/ — он оказывается на хосте.
+  mounts:
+    - host: .
+      dest: /workspace
+      readonly: false
+
+  ports: [8000:8000, 57374:57374]   # API todo-сервиса + дашборд loki
+  user: root            # create/init от root; loki start сам запускается от 'loki'

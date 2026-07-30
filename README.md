@@ -79,7 +79,9 @@ sandbox:                      # → microsandbox
 ```
 
 Full reference: [`platform.schema.json`](platform.schema.json) and
-[`examples/`](examples/) (`minimal.yaml`, `allowlist.yaml`, `full-stack.yaml`).
+[`examples/`](examples/) (`minimal.yaml`, `allowlist.yaml`, `full-stack.yaml`,
+`todo-api-cline/` — полный end-to-end пример: todo-сервис через provider cline
++ GLM/z.ai с пошаговым гайдом и найденными обходами).
 
 ### Network allow/deny lists
 
