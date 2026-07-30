@@ -231,6 +231,22 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "printf 'export PATH=\"/opt/npm-global/bin:/opt/node%s/bin:$PATH\"\\n' >> \"$LOKI_BASHRC\""
         % m.sandbox.init.packages.node_version,
         "chown -R loki:loki /workspace 2>/dev/null || true",
+        # Override npm-cline with the node-shim in EVERY bin dir it could be
+        # found (npm-global, /opt/npm-global, /usr/local/bin). npm-cline is a
+        # Bun binary that crashes on arm64; the shim must win regardless of PATH
+        # order. We write the shim wrapper to all known cline locations.
+        'if [ -f /opt/cline-shim/cline-node-shim.cjs ]; then',
+        '  for d in /usr/local/bin /opt/npm-global/bin /root/.npm-global/bin; do',
+        '    mkdir -p "$d"',
+        '    cat > "$d/cline" <<\'SHIMEOF2\'',
+        '#!/usr/bin/env bash',
+        'export CLINE_CWD="${CLINE_CWD:-$PWD}"',
+        'exec node /opt/cline-shim/cline-node-shim.cjs "$@"',
+        'SHIMEOF2',
+        '    chmod +x "$d/cline"',
+        '  done',
+        "  echo '[bootstrap] cline node-shim installed (overrides npm-cline everywhere)'",
+        'fi',
     ]
 
     # user-supplied tail
