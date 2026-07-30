@@ -90,7 +90,7 @@ sandbox:                      # → microsandbox
   init:
     packages:
       apt: [curl, git, python3, python3-pip]
-      npm_global: [loki-mode, "@skillkit/cli"]
+      npm_global: [loki-mode, "skillkit"]
       bun: true
   secrets:
     - { env: ANTHROPIC_API_KEY, allow_hosts: [api.anthropic.com] }
@@ -121,7 +121,7 @@ skills:
 In that mode `apply` creates + bootstraps the VM first, then runs each
 `skillkit` command as `msb exec <name> --user loki -- bash -lc '... skillkit ...'`.
 Skills are provisioned in the exact environment loki will use (same node and
-`@skillkit/cli` version). `doctor` then no longer requires `skillkit` locally.
+`skillkit` version). `doctor` then no longer requires `skillkit` locally.
 
 ### Skills agents mirror loki-mode providers
 

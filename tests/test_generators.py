@@ -209,10 +209,10 @@ def test_bootstrap_is_bash_with_set_e_and_packages():
 
 
 def test_bootstrap_quotes_scary_package_names():
-    m = _m(sandbox={"init": {"packages": {"npm_global": ["@skillkit/cli;rm -rf /"]}}})
+    m = _m(sandbox={"init": {"packages": {"npm_global": ["skillkit;rm -rf /"]}}})
     bs = generate_bootstrap(m).artifacts[0].content
     # the dangerous token must be quoted, not executed raw
-    assert "@skillkit/cli;rm -rf /" not in bs.split("'")[-2] or "';'" not in bs
+    assert "skillkit;rm -rf /" not in bs.split("'")[-2] or "';'" not in bs
     assert "npm install -g '" in bs
 
 
@@ -239,17 +239,21 @@ def test_bootstrap_guarantees_skillkit_when_in_vm():
     # in_vm=true: skillkit must be installed even if npm_global drops it
     m = _m(
         skills={"in_vm": True, "enabled": True, "install": [{"source": "a/b", "skills": ["x"]}]},
-        sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}},  # no @skillkit/cli
+        sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}},  # no skillkit
     )
     bs = generate_bootstrap(m).artifacts[0].content
-    assert "npm install -g '@skillkit/cli'" in bs
+    assert "npm install -g 'skillkit'" in bs
 
 
 def test_bootstrap_does_not_force_skillkit_on_host_mode():
-    # in_vm=false (host mode): skillkit runs on host, not forced into the VM
-    m = _m(sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}})
+    # in_vm=false (host mode): skillkit is not FORCED beyond npm_global. When
+    # the user explicitly drops it from npm_global, it is absent (host runs it).
+    m = _m(
+        skills={"in_vm": False, "enabled": True},
+        sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}},  # no skillkit
+    )
     bs = generate_bootstrap(m).artifacts[0].content
-    assert "@skillkit/cli" not in bs
+    assert "npm install -g 'skillkit'" not in bs
 
 
 # ---- sandbox -------------------------------------------------------------- #

@@ -68,7 +68,7 @@ sandbox:
   init:
     packages:
       apt: [curl, git, ca-certificates, python3, python3-pip, python3-venv, jq, procps]
-      npm_global: [loki-mode, "@skillkit/cli", "@anthropic-ai/claude-code"]
+      npm_global: [loki-mode, "skillkit", "@anthropic-ai/claude-code"]
       bun: true
       node_version: "22"
       extra_shell: |

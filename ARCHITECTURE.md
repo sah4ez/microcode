@@ -106,7 +106,7 @@ instead run it **inside** the microsandbox VM. In that mode:
   `msb exec <name> --user loki -- bash -lc '<env-prefix> && skillkit ...'` and
   runs **after** steps 5–6 (the VM must exist and be bootstrapped);
 * skills are provisioned in the exact environment loki will use (same node,
-  same `@skillkit/cli` version installed by `bootstrap.sh`).
+  same `skillkit` version installed by `bootstrap.sh`).
 
 Phase order becomes: doctor → plan → artifacts → **sandbox (create+init)** →
 **skillkit (in VM)** → loki. The translated `SKILL.md` files still land in the

@@ -68,7 +68,7 @@ sandbox:
       nameservers: [1.1.1.1, 8.8.8.8]
   init:
     packages:
-      npm_global: [loki-mode, "@skillkit/cli"]
+      npm_global: [loki-mode, "skillkit"]
     snapshot:
       # --- APPLY mode (default): boot from the pre-built snapshot ---
       from_snapshot: mcd-base

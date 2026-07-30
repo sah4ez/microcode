@@ -100,7 +100,7 @@ sandbox:
   init:
     packages:
       apt: [curl, git, ca-certificates, python3, python3-pip, unzip]
-      npm_global: [loki-mode, "@skillkit/cli"]
+      npm_global: [loki-mode, "skillkit"]
       bun: true
       node_version: "22"       # ставится через `n`, нужно >=22.15
       extra_shell: |

@@ -3,7 +3,7 @@
 # With skills.in_vm: true, microcode skips running skillkit on the host and
 # instead runs every skillkit install/translate command inside the VM (via
 # `msb exec --user loki -- bash -lc '... skillkit ...'`) AFTER the VM is created
-# and bootstrapped. Skills land in the same node/@skillkit/cli environment loki
+# and bootstrapped. Skills land in the same node/skillkit environment loki
 # will use. doctor no longer requires skillkit on the host.
 #
 # Phase order with in_vm: doctor -> plan -> artifacts -> sandbox(create+init)
@@ -41,6 +41,6 @@ sandbox:
     profile: [public]              # skillkit install needs registry.npmjs.org + github
   init:
     packages:
-      npm_global: [loki-mode, "@skillkit/cli"]
+      npm_global: [loki-mode, "skillkit"]
   mounts:
     - { host: ./src, dest: /workspace, readonly: false }

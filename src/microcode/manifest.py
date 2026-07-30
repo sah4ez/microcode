@@ -369,7 +369,7 @@ class InitPackages(BaseModel):
         default_factory=lambda: ["curl", "git", "ca-certificates", "python3", "python3-pip", "unzip"]
     )
     npm_global: list[str] = Field(
-        default_factory=lambda: ["loki-mode", "@skillkit/cli"]
+        default_factory=lambda: ["loki-mode", "skillkit"]
     )
     bun: bool = True
     node_version: str = "22"
