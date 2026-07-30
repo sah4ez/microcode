@@ -331,6 +331,27 @@ def test_sandbox_from_snapshot_boots_via_msb_run_and_skips_bootstrap():
     assert any("skipped" in n for n in res.notes)
 
 
+def test_sandbox_from_snapshot_omits_root_disk():
+    # --root-disk is incompatible with --from-snapshot (msb: "requires an OCI
+    # image"); the snapshot already pins the filesystem size from build time.
+    m = _m(sandbox={
+        "name": "sb1", "root_disk": "8G",
+        "init": {"snapshot": {"from_snapshot": "mcd-base"}},
+    })
+    res = generate_sandbox(m)
+    run = res.commands[0]
+    assert "--root-disk" not in run
+
+
+def test_sandbox_create_emits_root_disk():
+    # msb create WITH an OCI image accepts --root-disk
+    m = _m(sandbox={"name": "sb1", "root_disk": "8G"})
+    res = generate_sandbox(m)
+    create = res.commands[0]
+    assert "--root-disk" in create
+    assert create[create.index("--root-disk") + 1] == "8G"
+
+
 def test_sandbox_from_snapshot_rejects_enabled_combo():
     import pytest
     with pytest.raises(Exception):
