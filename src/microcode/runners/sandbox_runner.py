@@ -38,8 +38,40 @@ class SandboxRunner(ShellRunner):
             except OSError as e:  # pragma: no cover - best effort
                 logging_utils.warn(f"could not chmod {bs}: {e}")
 
+        # auto-create writable host mount directories before msb create/run.
+        # msb bind-mounts require the host path to exist; otherwise it either
+        # errors or creates it as root, which the unprivileged `loki` user then
+        # can't write to (bootstrap chowns /workspace, loki writes results).
+        if not dry_run:
+            self._ensure_mount_dirs(commands)
+
         resolved = [self._resolve_placeholders(argv) for argv in commands]
         super().run(resolved, dry_run=dry_run)
+
+    def _ensure_mount_dirs(self, commands: list[list[str]]) -> None:
+        """Create host-side dirs for writable bind mounts (host:dest[:ro])."""
+        from pathlib import Path
+
+        for argv in commands:
+            if argv[:2] not in (("msb", "create"), ("msb", "run")):
+                continue
+            for i, tok in enumerate(argv):
+                if tok != "-v" or i + 1 >= len(argv):
+                    continue
+                spec = argv[i + 1]
+                # skip named volumes (name only, no '/'), and readonly mounts
+                if spec.endswith(":ro") or ":" not in spec:
+                    continue
+                host = spec.split(":", 1)[0]
+                # only host bind paths (relative or absolute existing files)
+                if host.startswith("/") and not Path(host).exists():
+                    continue
+                p = Path(host)
+                if not p.is_absolute() and not p.exists():
+                    try:
+                        p.mkdir(parents=True, exist_ok=True)
+                    except OSError as e:  # pragma: no cover - best effort
+                        logging_utils.warn(f"could not create mount dir {p}: {e}")
 
     def _resolve_placeholders(self, argv: list[str]) -> list[str]:
         host_bs = str(self.artifacts_dir / config.BOOTSTRAP_NAME)

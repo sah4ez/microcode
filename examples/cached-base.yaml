@@ -51,8 +51,19 @@ sandbox:
     allow:
       - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
       - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      # npm (node, loki-mode, cline, @cline/core, skillkit)
       - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: "*.npmjs.org", proto: tcp, port: 443 }
+      # GitHub (skillkit тянет obra/superpowers; git clone; codeload tarballs)
       - { action: allow, target: github.com, proto: tcp, port: 443 }
+      - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
+      # apt (bootstrap ставит пакеты; нужен для build-режима)
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: "*.debian.org", proto: tcp, port: 443 }
+      # node tarball (bootstrap качает node; нужен для build-режима)
+      - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+      # bun installer (bootstrap качает bun; нужен для build-режима)
+      - { action: allow, target: bun.sh, proto: tcp, port: 443 }
     dns:
       nameservers: [1.1.1.1, 8.8.8.8]
   init:
