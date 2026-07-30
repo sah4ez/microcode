@@ -56,6 +56,10 @@ async function main() {
       providerId,
       modelId,
       apiKey,
+      // @cline/core >=1.x requires these boolean toggles (Zod schema).
+      enable_tools: true,    // allow tool use (file edit, run commands)
+      enable_spawn: false,   // no sub-process spawning (we run commands ourselves)
+      enable_teams: false,   // no multi-agent teams
       systemPrompt:
         "You are Cline, a coding agent. Use the available tools to accomplish the task in the workspace, then reply with a concise summary.",
     },
