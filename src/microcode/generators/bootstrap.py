@@ -247,6 +247,17 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         '  done',
         "  echo '[bootstrap] cline node-shim installed (overrides npm-cline everywhere)'",
         'fi',
+        # Seed cline config for the loki user so @cline/core finds the
+        # zai-coding-plan provider. apiKey is injected at runtime by the shim
+        # from CLINE_API_KEY env (forwarded by loki_runner); the config file
+        # just declares the provider + model so cline picks the right backend.
+        'mkdir -p /home/loki/.cline/data/settings',
+        'cat > /home/loki/.cline/data/settings/providers.json <<\'CLINECFG\'',
+        '{"version":1,"lastUsedProvider":"zai-coding-plan","providers":{',
+        '"zai-coding-plan":{"settings":{"provider":"zai-coding-plan",',
+        '"model":"glm-5.2"},"tokenSource":"manual"}}}',
+        'CLINECFG',
+        'chown -R loki:loki /home/loki/.cline 2>/dev/null || true',
     ]
 
     # user-supplied tail
