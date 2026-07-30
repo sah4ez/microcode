@@ -40,6 +40,10 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
         val = expand_env("${" + var + "}")
         if val:
             argv += ["-e", f"{var}={val}"]
+    # cline node-shim reads CLINE_MODEL; forward the manifest-declared model so
+    # it overrides the shim's hardcoded default (glm-4.6) for provider=cline.
+    if m.loki.provider == "cline" and m.loki.model:
+        argv += ["-e", f"CLINE_MODEL={m.loki.model}"]
     # external memory: loki reads LOKI_MEMORY_BASE_PATH and writes to the
     # mounted named volume (persists across VM destroy/recreate).
     if m.loki.memory.storage.enabled:

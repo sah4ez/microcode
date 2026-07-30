@@ -180,6 +180,16 @@ class LokiConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: LokiProvider = "claude"
+    model: str | None = Field(
+        default=None,
+        description=(
+            "model id for the active provider, e.g. 'claude-sonnet-4-5', "
+            "'glm-5.2', 'gpt-5'. Written to loki-config.yaml as `model` and to "
+            "the loki env as LOKI_MODEL_OVERRIDE. For provider=cline it is also "
+            "forwarded into the VM as CLINE_MODEL (the node-shim reads it). "
+            "None = provider default."
+        ),
+    )
     max_iterations: int = Field(default=20, ge=1)
     max_budget_usd: float = Field(default=10.0, ge=0)
     effort: Literal["low", "standard", "high"] = "high"

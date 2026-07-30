@@ -160,6 +160,31 @@ def test_loki_overrides_win():
     assert cfg["custom_key"] == 42
 
 
+def test_loki_model_written_to_config_and_env():
+    m = _m(loki={"provider": "cline", "model": "glm-5.2"})
+    res = generate_loki(m)
+    cfg = yaml.safe_load(res.artifacts[0].content)
+    assert cfg["model"] == "glm-5.2"
+    env = res.artifacts[1].content
+    assert "LOKI_MODEL_OVERRIDE=glm-5.2" in env
+
+
+def test_loki_model_none_omitted():
+    # no model -> neither loki-config.yaml nor the env carries a model
+    m = _m()
+    res = generate_loki(m)
+    cfg = yaml.safe_load(res.artifacts[0].content)
+    assert "model" not in cfg
+    assert "LOKI_MODEL_OVERRIDE" not in res.artifacts[1].content
+
+
+def test_loki_model_overridden_by_config_overrides():
+    # config_overrides merge last and win over the explicit model field
+    m = _m(loki={"model": "glm-5.2", "config_overrides": {"model": "glm-4.6"}})
+    cfg = yaml.safe_load(generate_loki(m).artifacts[0].content)
+    assert cfg["model"] == "glm-4.6"
+
+
 # ---- bootstrap ------------------------------------------------------------ #
 
 def test_bootstrap_is_bash_with_set_e_and_packages():

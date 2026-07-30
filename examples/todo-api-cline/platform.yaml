@@ -44,6 +44,7 @@ skills:
 # --- ОРКЕСТРАЦИЯ (loki-mode) ----------------------------------------------
 loki:
   provider: cline             # loki вызывает cline CLI (через node-shim в VM)
+  model: glm-5.2              # модель z.ai (→ CLINE_MODEL в VM + LOKI_MODEL_OVERRIDE)
   max_iterations: 15
   max_budget_usd: 5.0
   effort: standard

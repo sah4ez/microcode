@@ -76,6 +76,15 @@ platform.yaml  ──(read+validate)──►  Planner
 8. **msb exec loki start** — `loki start --config /workspace/.microcode/artifacts/loki-config.yaml
    --no-dashboard --simple <prd>`. Config + skills are available via the mount.
 
+### Model selection (`loki.model`)
+
+`loki.model` is the single declarative knob for the active provider's model. It
+flows three ways: into `loki-config.yaml` as `model`, into `loki.env` as
+`LOKI_MODEL_OVERRIDE` (read by loki-mode for any provider), and — only for
+`provider: cline` — into the VM as `CLINE_MODEL` (the `@cline/core` node-shim
+reads it, overriding its `glm-4.6` default). `config_overrides.model` wins over
+`loki.model`; omitting `model` keeps the provider default.
+
 ### Optional: skillkit inside the VM (`skills.in_vm: true`)
 
 By default skillkit runs on the **host** (step 4). Set `skills.in_vm: true` to

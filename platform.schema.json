@@ -73,6 +73,10 @@
       "additionalProperties": false,
       "properties": {
         "provider": { "type": "string", "enum": ["claude", "codex", "cline", "aider"] },
+        "model": {
+          "type": "string",
+          "description": "model id for the active provider (loki-config.yaml model + LOKI_MODEL_OVERRIDE; CLINE_MODEL for cline)"
+        },
         "max_iterations": { "type": "integer", "minimum": 1 },
         "max_budget_usd": { "type": "number", "minimum": 0 },
         "effort": { "type": "string", "enum": ["low", "standard", "high"] },

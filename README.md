@@ -79,6 +79,7 @@ skills:                       # → skillkit
 
 loki:                         # → loki-mode
   provider: claude
+  model: claude-sonnet-4-5    # model id for the active provider (optional)
   max_budget_usd: 10.0
   quality_gates: { enabled: true }
 
@@ -125,6 +126,23 @@ It **mirrors loki-mode's provider set 1:1** — `claude`, `codex`, `cline`,
 `aider` (gemini was deprecated in loki-mode v7.5.18) — so a skill never targets
 a provider loki cannot run. Each `skills.install[].agents` inherits this set by
 default; set it explicitly on a source to narrow it (e.g. `agents: [cline]`).
+
+### Model selection
+
+`loki.model` sets the model id for the active provider, in one place for all
+providers:
+
+```yaml
+loki:
+  provider: cline
+  model: glm-5.2          # or claude-sonnet-4-5, gpt-5, ...
+```
+
+It is written to `loki-config.yaml` as `model` **and** to the loki env as
+`LOKI_MODEL_OVERRIDE`. For `provider: cline` it is additionally forwarded into
+the VM as `CLINE_MODEL` (read by the node-shim, overriding its `glm-4.6`
+default). Omit it to use the provider's default. `config_overrides.model` (if
+set) wins over `loki.model`.
 
 ### Network allow/deny lists
 

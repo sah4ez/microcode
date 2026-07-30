@@ -28,6 +28,9 @@ def _loki_yaml(m: PlatformManifest) -> dict:
         "memory": {"enabled": l.memory.enabled, "managed": l.memory.managed},
         "proofs": {"enabled": l.proofs.enabled},
     }
+    # explicit model override for the active provider
+    if l.model:
+        cfg["model"] = l.model
     # merge user overrides last so they win
     if l.config_overrides:
         cfg.update(l.config_overrides)
@@ -42,6 +45,9 @@ def _loki_env(m: PlatformManifest) -> str:
         f"LOKI_SDK_MODE={l.sdk_mode}",
         f"LOKI_MAX_ITERATIONS={l.max_iterations}",
     ]
+    if l.model:
+        # loki-mode reads LOKI_MODEL_OVERRIDE to override any provider's model.
+        lines.append(f"LOKI_MODEL_OVERRIDE={l.model}")
     if l.effort:
         lines.append(f"LOKI_COMPLEXITY={l.effort}")
     if l.memory.managed:
