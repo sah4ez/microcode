@@ -1,0 +1,28 @@
+# Conda development environment for microcode.
+#
+# A conda env has no EXTERNALLY-MANAGED marker, so `pip install -e .[dev]` works
+# here without the PEP 668 "externally-managed-environment" error you get on a
+# system/Homebrew Python.
+#
+#   conda env create -f environment.yml
+#   conda activate mcd
+#   pytest              # package is already installed editable above
+#
+# Keep this in sync with the runtime deps in pyproject.toml.
+name: mcd
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip
+  # runtime (mirror [project].dependencies in pyproject.toml)
+  - pydantic>=2.6
+  - pyyaml>=6.0
+  - typer>=0.12
+  - rich>=13.7
+  # dev
+  - pytest>=8.0
+  # editable install of this package + its [dev] extras
+  - pip:
+      - "-e .[dev]"

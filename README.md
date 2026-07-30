@@ -15,11 +15,28 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.
 
 ## Install
 
+The recommended way is a conda env (`environment.yml` defines one named `mcd`).
+A conda env has no `EXTERNALLY-MANAGED` marker, so `pip install -e .[dev]` works
+without the PEP 668 `error: externally-managed-environment` that a system or
+Homebrew Python raises:
+
 ```bash
 git clone <this-repo> microcode && cd microcode
+conda env create -f environment.yml   # creates env `mcd` + installs microcode editable
+conda activate mcd
+pytest                                 # package is already installed; run the suite
+```
+
+<details><summary>Alternative: plain venv</summary>
+
+```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 ```
+If you install into a system/Homebrew Python directly, add `--break-system-packages`
+(or use a venv/conda env as above) to bypass PEP 668.
+
+</details>
 
 Host prerequisites (checked by `microcode doctor`):
 
