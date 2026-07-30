@@ -122,7 +122,11 @@ def apply(
 
     # 3) loki inside VM
     logging_utils.step("Starting loki-mode inside the VM")
-    LokiRunner(m=m, config_guest=GUEST_CONFIG, prd=prd, cwd=str(root)).run(dry_run=dry_run)
+    config_host = str(artifacts_dir / config.LOKI_CONFIG_NAME)
+    LokiRunner(
+        m=m, config_guest=GUEST_CONFIG, config_host=config_host,
+        prd=prd, cwd=str(root),
+    ).run(dry_run=dry_run)
 
     if dry_run:
         logging_utils.warn("dry-run: nothing was executed")

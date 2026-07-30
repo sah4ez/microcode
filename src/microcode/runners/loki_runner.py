@@ -57,14 +57,31 @@ class LokiRunner(ShellRunner):
 
     def __init__(
         self, m: PlatformManifest, config_guest: str, prd: str | None = None,
-        cwd: str | None = None,
+        cwd: str | None = None, config_host: str | None = None,
     ) -> None:
         super().__init__(cwd=cwd)
         self.m = m
         self.config_guest = config_guest
         self.prd = prd
+        self.config_host = config_host
 
     def run(self, dry_run: bool = False) -> None:  # type: ignore[override]
         if not dry_run:
             require("msb")
-        super().run([loki_start_argv(self.m, self.config_guest, self.prd)], dry_run=dry_run)
+        # The loki config is generated on the host (<state_dir>/artifacts/) but
+        # may not be visible inside the VM (only ./src is mounted as /workspace).
+        # Create the guest dir and copy the config in via `msb cp` before loki.
+        cmds: list[list[str]] = []
+        if self.config_host and not dry_run:
+            import os
+            guest_dir = os.path.dirname(self.config_guest)
+            cmds.append([
+                "msb", "exec", self.m.sandbox.name, "--user", self.m.sandbox.user,
+                "--", "mkdir", "-p", guest_dir,
+            ])
+            cmds.append([
+                "msb", "cp", self.config_host,
+                f"{self.m.sandbox.name}:{self.config_guest}",
+            ])
+        cmds.append(loki_start_argv(self.m, self.config_guest, self.prd))
+        super().run(cmds, dry_run=dry_run)
