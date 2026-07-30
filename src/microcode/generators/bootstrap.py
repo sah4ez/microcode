@@ -203,12 +203,22 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "cp -a /root/.npm-global/lib /opt/npm-global/lib 2>/dev/null || true",
         "cp -a /root/.npm-global/bin/. /opt/npm-global/bin/ 2>/dev/null || true",
         "chmod -R a+rX /opt/npm-global",
-        # also expose bun-global binaries (bun install -g puts them in ~/.bun/bin)
+        # expose bun-global binaries. bun install -g puts RELATIVE symlinks in
+        # ~/.bun/bin pointing at ~/.bun/install/global/node_modules/<pkg>/dist/...
+        # cp -a would copy broken relative links, so re-create ABSOLUTE symlinks
+        # resolved against the real target.
         "if [ -d /root/.bun/bin ]; then",
-        "  cp -a /root/.bun/bin/. /opt/npm-global/bin/ 2>/dev/null || true",
+        "  for f in /root/.bun/bin/*; do",
+        "    [ -e \"$f\" ] || continue",
+        "    name=$(basename \"$f\")",
+        "    real=$(readlink -f \"$f\") || continue",
+        "    [ -n \"$real\" ] && [ -e \"$real\" ] || continue",
+        "    ln -sf \"$real\" /opt/npm-global/bin/$name",
+        "  done",
         "fi",
-        # re-link common CLIs so non-root users can call them
-        "for b in loki cline claude skillkit sk; do",
+        # re-link common npm CLIs so non-root users can call them (npm puts bins
+        # under lib/node_modules/<pkg>/bin/). Use a resolved path, NOT a glob.
+        "for b in loki cline claude; do",
         "  [ -e /opt/npm-global/bin/$b ] || ln -sf /opt/npm-global/lib/node_modules/*/bin/$b /opt/npm-global/bin/$b 2>/dev/null || true",
         "done",
         # ensure the loki user's login shell can find all installed tools
