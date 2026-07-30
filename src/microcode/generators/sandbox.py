@@ -161,9 +161,11 @@ def generate_sandbox(
     commands = [_create_argv(m, bootstrap_guest)]
 
     if s.init.snapshot.enabled:
-        # snapshot path: run init, then snapshot. (When re-applying from an
-        # existing snapshot the runner would skip the init step instead.)
+        # snapshot path: run init, STOP the VM, then snapshot. msb requires the
+        # source sandbox to be stopped before capturing (running/draining/paused
+        # are rejected by msb snapshot create).
         commands.append(_init_argv(m, bootstrap_guest))
+        commands.append(_stop_argv(m))
         commands.append(_snapshot_argv(m))
         notes.append(
             f"snapshot caching enabled ({s.init.snapshot.name}); "

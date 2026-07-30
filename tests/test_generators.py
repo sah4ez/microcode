@@ -275,11 +275,13 @@ def test_sandbox_init_executed_after_create():
     assert "bash" in init and "/root/bootstrap.sh" in init
 
 
-def test_sandbox_snapshot_adds_snapshot_command():
+def test_sandbox_snapshot_adds_stop_then_snapshot_command():
     m = _m(sandbox={"init": {"snapshot": {"enabled": True, "name": "s1"}}})
     res = generate_sandbox(m)
-    assert len(res.commands) == 3
-    assert res.commands[2][:4] == ["msb", "snapshot", "create", "s1"]
+    # create + init + STOP + snapshot (msb requires a stopped sandbox to capture)
+    assert len(res.commands) == 4
+    assert res.commands[2][:3] == ["msb", "stop", "loki-build"]
+    assert res.commands[3][:4] == ["msb", "snapshot", "create", "s1"]
 
 
 def test_sandbox_from_snapshot_boots_via_msb_run_and_skips_bootstrap():

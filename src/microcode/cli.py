@@ -129,7 +129,7 @@ def build(
     Subsequent ``apply`` calls with ``snapshot.from_snapshot`` boot from it,
     skipping bootstrap entirely (~seconds vs ~30 min on arm64).
     """
-    from microcode.runners import SandboxRunner, SkillkitRunner, which
+    from microcode.runners import SandboxRunner
 
     path, m = _load(file)
     root = path.parent
@@ -153,21 +153,13 @@ def build(
             write_artifacts(plan, artifacts_dir)
             logging_utils.ok(f"artifacts written to {artifacts_dir}")
 
-        # Only the sandbox create + bootstrap phases (no skillkit, no loki).
-        logging_utils.step("Creating sandbox + bootstrapping")
+        # The plan already contains the full sequence when snapshot.enabled:
+        # msb create + bootstrap + msb stop + msb snapshot create. We just run
+        # it (no skillkit, no loki — that's `apply`'s job).
+        logging_utils.step("Creating sandbox + bootstrapping + snapshot")
         SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
             plan.sandbox_commands, dry_run=dry_run
         )
-
-        # Snapshot capture: stop the VM, then snapshot from it.
-        snap_name = m.sandbox.init.snapshot.name
-        stop_cmd = ["msb", "stop", m.sandbox.name]
-        snap_cmd = ["msb", "snapshot", "create", snap_name, "--from", m.sandbox.name, "--force"]
-        runner = SkillkitRunner(cwd=str(root))  # reuses shell + dry-run logic
-        logging_utils.step("Stopping sandbox for snapshot capture")
-        runner.run([stop_cmd], dry_run=dry_run)
-        logging_utils.step(f"Capturing snapshot '{snap_name}'")
-        runner.run([snap_cmd], dry_run=dry_run)
 
         if dry_run:
             logging_utils.warn("dry-run: nothing was executed")
