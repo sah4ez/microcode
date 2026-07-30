@@ -169,6 +169,22 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         for pkg in npm_pkgs:
             lines.append(f"npm install -g {_quote(pkg)}")
 
+    # bun global packages (best-effort; bun itself is installed above if init.bun).
+    # If bun wasn't installed (init.bun=false) but bun_global is set, install bun
+    # first so the global installs can proceed.
+    if init.bun_global:
+        if not init.bun:
+            lines += [
+                "",
+                "echo '[bootstrap] bun (needed for bun_global)'",
+                "curl -fsSL https://bun.sh/install | bash || echo '[bootstrap] bun install skipped'",
+            ]
+        lines.append("")
+        lines.append("echo '[bootstrap] bun global packages'")
+        lines.append('export PATH="$HOME/.bun/bin:$PATH"')
+        for pkg in init.bun_global:
+            lines.append(f"bun install -g {_quote(pkg)} || echo \"[bootstrap] bun install {_quote(pkg)} failed\"")
+
     # provider CLIs
     prov_lines = _provider_cli_install_lines(m.loki.provider_clis)
     if prov_lines:

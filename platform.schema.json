@@ -206,6 +206,11 @@
               "properties": {
                 "apt": { "type": "array", "items": { "type": "string" } },
                 "npm_global": { "type": "array", "items": { "type": "string" } },
+                "bun_global": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "packages installed via bun install -g (best-effort)"
+                },
                 "bun": { "type": "boolean" },
                 "node_version": { "type": "string" },
                 "extra_shell": { "type": "string" }

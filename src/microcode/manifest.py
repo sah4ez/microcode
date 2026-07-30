@@ -371,6 +371,14 @@ class InitPackages(BaseModel):
     npm_global: list[str] = Field(
         default_factory=lambda: ["loki-mode", "skillkit"]
     )
+    bun_global: list[str] = Field(
+        default_factory=list,
+        description=(
+            "packages installed globally via `bun install -g` (after bun itself "
+            "is installed; best-effort, failures do not abort bootstrap). Use "
+            "for bun-native tooling that npm installs incorrectly."
+        ),
+    )
     bun: bool = True
     node_version: str = "22"
     extra_shell: str = Field(default="", description="raw bash appended to bootstrap.sh")

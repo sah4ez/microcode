@@ -223,6 +223,24 @@ def test_bootstrap_provider_clis():
     assert "aider-chat" in bs
 
 
+def test_bootstrap_bun_global_packages():
+    m = _m(sandbox={"init": {"packages": {"bun_global": ["tsx", "@scope/pkg"]}}})
+    bs = generate_bootstrap(m).artifacts[0].content
+    # each package installed via bun install -g (best-effort, quoted)
+    assert "bun install -g 'tsx'" in bs
+    assert "bun install -g '@scope/pkg'" in bs
+    # bun itself is installed (init.bun defaults true) before the global step
+    assert "bun.sh/install" in bs
+
+
+def test_bootstrap_bun_global_installs_bun_if_disabled():
+    # if init.bun=false but bun_global is set, bun is still installed first
+    m = _m(sandbox={"init": {"packages": {"bun": False, "bun_global": ["tsx"]}}})
+    bs = generate_bootstrap(m).artifacts[0].content
+    assert "bun.sh/install" in bs  # auto-installed for bun_global
+    assert "bun install -g 'tsx'" in bs
+
+
 def test_bootstrap_extra_shell_appended():
     m = _m(sandbox={"init": {"packages": {"extra_shell": "echo hello-team"}}})
     bs = generate_bootstrap(m).artifacts[0].content
