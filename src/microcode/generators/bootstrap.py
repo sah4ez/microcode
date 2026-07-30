@@ -235,6 +235,17 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         lines.append("echo '[bootstrap] extra_shell'")
         lines.append(init.extra_shell.strip())
 
+    # reclaim disk: clear apt caches, npm cache, and downloaded tarballs so the
+    # snapshot is smaller and the overlay doesn't overflow (default ~4G).
+    lines += [
+        "",
+        "echo '[bootstrap] cleanup caches'",
+        "rm -rf /tmp/apt-cache /tmp/npm.tgz /tmp/*.tgz 2>/dev/null || true",
+        "apt-get clean 2>/dev/null || true",
+        "rm -rf /var/lib/apt/lists/* 2>/dev/null || true",
+        "npm cache clean --force 2>/dev/null || true",
+    ]
+
     # snapshot hint (informational; actual snapshot taken by the runner)
     if snap.enabled:
         lines.append("")

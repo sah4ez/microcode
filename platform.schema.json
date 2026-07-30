@@ -127,6 +127,7 @@
         "memory": { "type": "integer", "minimum": 128 },
         "max_cpus": { "type": ["integer", "null"] },
         "max_memory": { "type": ["integer", "null"] },
+        "root_disk": { "type": ["string", "null"], "description": "writable rootfs size, e.g. '8G' (--root-disk)" },
         "network": {
           "type": "object",
           "additionalProperties": false,

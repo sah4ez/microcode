@@ -30,6 +30,8 @@ def _create_argv(m: PlatformManifest, bootstrap_guest: str) -> list[str]:
         argv += ["--max-cpus", str(s.max_cpus)]
     if s.max_memory is not None:
         argv += ["--max-memory", f"{s.max_memory}M"]
+    if s.root_disk:
+        argv += ["--root-disk", s.root_disk]
 
     # network policy (profile OR allowlist/denylist; mutually exclusive in msb)
     argv += network_argv(s.network)
@@ -116,6 +118,8 @@ def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
         argv += ["--max-cpus", str(s.max_cpus)]
     if s.max_memory is not None:
         argv += ["--max-memory", f"{s.max_memory}M"]
+    if s.root_disk:
+        argv += ["--root-disk", s.root_disk]
 
     argv += network_argv(s.network)
 

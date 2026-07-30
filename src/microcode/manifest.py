@@ -467,6 +467,14 @@ class SandboxConfig(BaseModel):
     memory: int = Field(default=2048, ge=128, description="MiB")
     max_cpus: int | None = None
     max_memory: int | None = Field(default=None, description="MiB; enables live resize")
+    root_disk: str | None = Field(
+        default=None,
+        description=(
+            "writable rootfs layer size for OCI images, e.g. '8G' or 'tmpfs:2G'. "
+            "Emits msb --root-disk. Needed when the full bootstrap (node/loki/"
+            "cline/skillkit) overflows the default ~4G overlay (ENOSPC)."
+        ),
+    )
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     init: InitConfig = Field(default_factory=InitConfig)
     secrets: list[SecretRef] = Field(default_factory=list)
