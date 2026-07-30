@@ -44,7 +44,7 @@ async function main() {
     process.exit(1);
   }
   const cwd = process.env.CLINE_CWD || process.cwd();
-  const apiKey = process.env.CLINE_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+  const apiKey = process.env.CLINE_API_KEY || process.env.GLM_API_KEY || process.env.ANTHROPIC_API_KEY || "";
   const modelId = process.env.CLINE_MODEL || "glm-4.6";
   const providerId = process.env.CLINE_PROVIDER_ID || "zai-coding-plan";
 
@@ -56,10 +56,12 @@ async function main() {
       providerId,
       modelId,
       apiKey,
-      // @cline/core >=1.x requires these boolean toggles in camelCase (Zod).
-      enableTools: true,        // allow tool use (file edit, run commands)
-      enableSpawnAgent: false,  // no sub-process spawning
-      enableTeams: false,       // no multi-agent teams
+      // @cline/core startResolvedSession maps these (camelCase) to the zod-
+      // validated snake_case session fields: enable_tools<-enableTools,
+      // enable_spawn<-enableSpawnAgent, enable_teams<-enableAgentTeams.
+      enableTools: true,
+      enableSpawnAgent: false,
+      enableAgentTeams: false,
       systemPrompt:
         "You are Cline, a coding agent. Use the available tools to accomplish the task in the workspace, then reply with a concise summary.",
     },
@@ -67,9 +69,9 @@ async function main() {
     interactive: false,
     localRuntime: { workspaceRoot: cwd, cwd },
   });
-
-  // cline.start creates the session; cline.send kicks the agent LLM tool-use loop.
-  const result = await cline.send({ sessionId: r.sessionId, prompt });
+  // start() with a prompt runs the full agent loop synchronously and returns
+  // {sessionId, manifest, result}. The assistant text is in result.text.
+  const result = r.result || r;
 
   if (result && typeof result.text === "string" && result.text.length) {
     process.stdout.write(result.text + "\n");

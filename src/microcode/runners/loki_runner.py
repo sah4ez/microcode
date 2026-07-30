@@ -36,7 +36,7 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
     )
     argv = ["msb", "exec", m.sandbox.name, "--user", "loki"]
     # forward provider auth env (resolved from the host env via ${VAR} expansion)
-    for var in ("GLM_API_KEY", "ZAI_BUSINESS_BASE_URL", "ZAI_OAUTH_CLIENT_ID", "ZAI_OAUTH_ORIGIN"):
+    for var in ("GLM_API_KEY", "ZAI_BUSINESS_BASE_URL", "ZAI_OAUTH_CLIENT_ID", "ZAI_OAUTH_ORIGIN", "CLINE_API_KEY"):
         val = expand_env("${" + var + "}")
         if val:
             argv += ["-e", f"{var}={val}"]
