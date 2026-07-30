@@ -101,6 +101,15 @@ def apply(
         SkillkitRunner(cwd=str(root)).run(plan.skillkit_commands, dry_run=dry_run)
 
     # 2) sandbox: create + init (+ snapshot)
+    # If booting from scratch (msb create, not --from-snapshot which already
+    # has --replace), remove a stale same-name sandbox first so create doesn't
+    # fail with "already exists".
+    if not dry_run and plan.sandbox_commands and plan.sandbox_commands[0][:2] == ["msb", "create"]:
+        logging_utils.step(f"Removing stale sandbox '{m.sandbox.name}' (if any)")
+        try:
+            SkillkitRunner(cwd=str(root)).run([["msb", "rm", "-f", m.sandbox.name]])
+        except RunnerError:
+            pass  # tolerate "not found"
     logging_utils.step("Provisioning sandbox (microsandbox)")
     SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
         plan.sandbox_commands, dry_run=dry_run
