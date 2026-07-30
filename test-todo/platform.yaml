@@ -59,7 +59,7 @@ skills:
 
   translate:
     target_agent: cline              # все скиллы переводятся под формат cline
-    output_dir: skills               # → skills/ (примонтировано в VM)
+    output_dir: .skills-generated    # отдельная папка (не конфликтует с overlay /workspace/skills)
     also_into_memory: true           # зеркалим SKILL.md в .loki/memory/skills/
 
 # ───────────────────────────────────────────────────────────────────────── #
@@ -80,7 +80,7 @@ loki:
     enabled: true
     managed: true
     storage:                         # кросс-проектная память (volume)
-      enabled: true
+      # enabled: true
       volume: loki-memory
       dest: /data/loki-memory
   proofs:
@@ -99,6 +99,7 @@ sandbox:
   name: notes-build
   cpus: 4
   memory: 4096
+  root_disk: 8G
 
   network:
     # allowlist: запрет по умолчанию. VM ходит только к явно разрешённым хостам.
@@ -134,6 +135,7 @@ sandbox:
     packages:
       apt: [curl, git, ca-certificates, python3, python3-pip, python3-venv, unzip]
       npm_global: [loki-mode, "@skillkit/cli"]
+      bun_global: [skillkit]
     snapshot:
       # --- APPLY mode (default): boot from the pre-built snapshot ---
       from_snapshot: mcd-base
