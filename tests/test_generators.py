@@ -300,6 +300,8 @@ def test_sandbox_from_snapshot_boots_via_msb_run_and_skips_bootstrap():
     assert "--detach" in run
     # resources are still wired
     assert "--cpus" in run and "4" in run
+    # --replace so a stale same-name sandbox is recreated from the snapshot
+    assert "--replace" in run
     # no bootstrap injection when booting from a snapshot
     assert "--copy-file" not in run
     assert not any("bootstrap.sh" in " ".join(c) for c in res.commands)

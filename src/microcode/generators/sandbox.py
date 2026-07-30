@@ -105,7 +105,10 @@ def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
     """
     s = m.sandbox
     argv = ["msb", "run", "--from-snapshot", s.init.snapshot.from_snapshot]
-    argv += ["--name", s.name, "--detach"]
+    # --replace: if a sandbox with this name already exists (e.g. left over from
+    # a previous build/apply), recreate it from the snapshot instead of silently
+    # reusing the stale one (msb would otherwise ignore --from-snapshot).
+    argv += ["--name", s.name, "--detach", "--replace"]
 
     argv += ["--cpus", str(s.cpus)]
     argv += ["--memory", f"{s.memory}M"]

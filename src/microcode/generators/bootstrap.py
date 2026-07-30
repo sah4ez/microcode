@@ -186,7 +186,7 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "cp -a /root/.npm-global/bin /opt/npm-global/bin 2>/dev/null || true",
         "chmod -R a+rX /opt/npm-global",
         # re-link common CLIs so non-root users can call them
-        "for b in loki cline claude; do",
+        "for b in loki cline claude skillkit; do",
         "  [ -e /opt/npm-global/bin/$b ] || ln -sf /opt/npm-global/lib/node_modules/*/bin/$b /opt/npm-global/bin/$b 2>/dev/null || true",
         "done",
         # ensure the loki user's login shell can find all installed tools
