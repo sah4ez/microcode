@@ -71,7 +71,12 @@ def _render_bootstrap(m: PlatformManifest) -> str:
     snap = m.sandbox.init.snapshot
 
     apt_pkgs = init.apt
-    npm_pkgs = init.npm_global
+    npm_pkgs = list(init.npm_global)
+    # When skills run inside the VM (skills.in_vm), skillkit must be present in
+    # the VM for the install/translate phase. A user may override npm_global and
+    # accidentally drop @skillkit/cli, so guarantee it here.
+    if m.skills.in_vm and m.skills.enabled and "@skillkit/cli" not in npm_pkgs:
+        npm_pkgs.append("@skillkit/cli")
 
     lines: list[str] = [
         "#!/usr/bin/env bash",

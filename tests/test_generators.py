@@ -235,6 +235,23 @@ def test_bootstrap_snapshot_hint():
     assert "snap-x" in bs
 
 
+def test_bootstrap_guarantees_skillkit_when_in_vm():
+    # in_vm=true: skillkit must be installed even if npm_global drops it
+    m = _m(
+        skills={"in_vm": True, "enabled": True, "install": [{"source": "a/b", "skills": ["x"]}]},
+        sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}},  # no @skillkit/cli
+    )
+    bs = generate_bootstrap(m).artifacts[0].content
+    assert "npm install -g '@skillkit/cli'" in bs
+
+
+def test_bootstrap_does_not_force_skillkit_on_host_mode():
+    # in_vm=false (host mode): skillkit runs on host, not forced into the VM
+    m = _m(sandbox={"init": {"packages": {"npm_global": ["loki-mode"]}}})
+    bs = generate_bootstrap(m).artifacts[0].content
+    assert "@skillkit/cli" not in bs
+
+
 # ---- sandbox -------------------------------------------------------------- #
 
 def test_sandbox_create_has_image_resources_and_bootstrap():
