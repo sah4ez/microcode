@@ -50,7 +50,11 @@ def _wrap_in_vm(cmd: list[str], m: PlatformManifest) -> list[str]:
 
 def _build_skills_manifest(m: PlatformManifest) -> dict:
     skills = m.skills
-    agents_default = [skills.translate.target_agent]
+    # The fixed agent set skills target — mirrors loki-mode's providers 1:1
+    # (claude, codex, cline, aider) so skills never target a provider loki
+    # cannot run. Falls back to the single translate target only if the user
+    # explicitly emptied skills.agents.
+    agents_default = list(skills.agents) or [skills.translate.target_agent]
     entries = []
     for inst in skills.install:
         entries.append(
@@ -100,7 +104,7 @@ def generate_skills(m: PlatformManifest) -> GenerationResult:
             cmd += ["--provider", inst.provider]
         if inst.skills:
             cmd += ["--skills", ",".join(inst.skills)]
-        agents = inst.agents or [skills.translate.target_agent]
+        agents = inst.agents or list(skills.agents) or [skills.translate.target_agent]
         for a in agents:
             cmd += ["--agent", a]
         commands.append(cmd)

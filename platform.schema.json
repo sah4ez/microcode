@@ -60,6 +60,11 @@
             "also_into_memory": { "type": "boolean" },
             "force": { "type": "boolean" }
           }
+        },
+        "agents": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["claude", "codex", "cline", "aider"] },
+          "description": "fixed agent set skills target; mirrors loki-mode providers 1:1"
         }
       }
     },

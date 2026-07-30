@@ -48,8 +48,11 @@ class SkillInstall(BaseModel):
     source: str = Field(..., description="owner/repo, local path, gist URL, or name")
     skills: list[str] = Field(default_factory=list, description="subset; empty = all")
     agents: list[str] = Field(
-        default_factory=lambda: ["claude-code"],
-        description="target agents for this source",
+        default_factory=list,
+        description=(
+            "target agents for this source; empty (default) = inherit "
+            "skills.agents (the loki-mode provider set: claude, codex, cline, aider)"
+        ),
     )
     provider: Provider | None = Field(
         default=None, description="force a provider when autodetect fails"
@@ -105,13 +108,30 @@ class SkillsConfig(BaseModel):
     registry: SkillRegistry = Field(default_factory=SkillRegistry)
     install: list[SkillInstall] = Field(default_factory=list)
     translate: SkillTranslate = Field(default_factory=SkillTranslate)
+    agents: list[str] = Field(
+        default_factory=lambda: list(LOKI_AGENTS),
+        description=(
+            "fixed agent set skills are provisioned/translated for — mirrors "
+            "loki-mode's provider set 1:1 (claude, codex, cline, aider). Use to "
+            "constrain SkillInstall.agents / translate.target_agent so skills "
+            "never target a provider loki-mode cannot run. Defaults to LOKI_AGENTS."
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #
 # loki (loki-mode)
 # --------------------------------------------------------------------------- #
 
+# Authoritative loki-mode provider set. loki-mode drives exactly these four CLI
+# providers (see loki-mode docs/providers.md: claude, codex, cline, aider;
+# gemini was deprecated in v7.5.18). This is the single source of truth that the
+# skills section mirrors so translated skills target only providers loki can run.
 LokiProvider = Literal["claude", "codex", "cline", "aider"]
+
+# The fixed agent set the skills section should provision/translate for — mirrors
+# LokiProvider 1:1 so skills never target a provider loki-mode cannot run.
+LOKI_AGENTS: list[str] = ["claude", "codex", "cline", "aider"]
 
 
 class QualityGates(BaseModel):

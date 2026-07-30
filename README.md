@@ -72,8 +72,9 @@ version: 1
 
 skills:                       # → skillkit
   in_vm: false                # true → run skillkit inside the VM (after bootstrap)
+  agents: [claude, codex, cline, aider]  # fixed set mirroring loki-mode providers
   install:
-    - { source: anthropics/skills, skills: [code-review], agents: [claude-code] }
+    - { source: anthropics/skills, skills: [code-review] }  # agents inherits above
   translate: { target_agent: claude-code, output_dir: skills }
 
 loki:                         # → loki-mode
@@ -116,6 +117,14 @@ In that mode `apply` creates + bootstraps the VM first, then runs each
 `skillkit` command as `msb exec <name> --user loki -- bash -lc '... skillkit ...'`.
 Skills are provisioned in the exact environment loki will use (same node and
 `@skillkit/cli` version). `doctor` then no longer requires `skillkit` locally.
+
+### Skills agents mirror loki-mode providers
+
+`skills.agents` fixes the set of agents skills are provisioned/translated for.
+It **mirrors loki-mode's provider set 1:1** — `claude`, `codex`, `cline`,
+`aider` (gemini was deprecated in loki-mode v7.5.18) — so a skill never targets
+a provider loki cannot run. Each `skills.install[].agents` inherits this set by
+default; set it explicitly on a source to narrow it (e.g. `agents: [cline]`).
 
 ### Network allow/deny lists
 

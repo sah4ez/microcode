@@ -73,7 +73,35 @@ def test_skills_tap_commands_emitted():
     assert ["skillkit", "tap", "add", "myorg/internal"] in res.commands
 
 
-def test_skills_in_vm_wraps_commands_in_msb_exec():
+def test_skills_agents_default_mirrors_loki_providers():
+    # without an explicit agents list, skills target all four loki-mode providers
+    m = _m(skills={"install": [{"source": "anthropics/skills", "skills": ["x"]}]})
+    res = generate_skills(m)
+    manifest = json.loads(res.artifacts[0].content)
+    expected = ["claude", "codex", "cline", "aider"]
+    assert manifest["agents"] == expected
+    assert manifest["skills"][0]["agents"] == expected
+    # the install command carries one --agent flag per provider
+    install = next(c for c in res.commands if c[:2] == ["skillkit", "install"])
+    flags = [install[i + 1] for i, t in enumerate(install) if t == "--agent"]
+    assert sorted(flags) == sorted(expected)
+
+
+def test_skills_agents_explicit_override():
+    # an explicit skills.agents narrows the set (still valid loki providers)
+    m = _m(skills={"agents": ["cline"], "install": [{"source": "a/b", "skills": ["x"]}]})
+    manifest = json.loads(generate_skills(m).artifacts[0].content)
+    assert manifest["skills"][0]["agents"] == ["cline"]
+    assert manifest["agents"] == ["cline"]
+
+
+def test_skills_install_agents_override_on_source():
+    # per-source agents still take precedence over the default loki set
+    m = _m(skills={"install": [
+        {"source": "a/b", "skills": ["x"], "agents": ["aider"]},
+    ]})
+    manifest = json.loads(generate_skills(m).artifacts[0].content)
+    assert manifest["skills"][0]["agents"] == ["aider"]
     m = _m(
         sandbox={"name": "vm-1", "init": {"packages": {"node_version": "22"}}},
         skills={

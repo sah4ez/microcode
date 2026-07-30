@@ -92,6 +92,16 @@ Phase order becomes: doctor → plan → artifacts → **sandbox (create+init)**
 **skillkit (in VM)** → loki. The translated `SKILL.md` files still land in the
 mounted `skills/` dir, so nothing else changes.
 
+## Why `skills.agents` mirrors loki-mode providers
+
+`skills.agents` is pinned to loki-mode's provider set — `claude`, `codex`,
+`cline`, `aider` (`LOKI_AGENTS`, derived from `LokiProvider`) — and is the
+default for every `skills.install[].agents`. This guarantees skills are only
+provisioned/translated for providers loki can actually run (gemini was
+deprecated in loki-mode v7.5.18, so it is excluded). A source may override with
+a narrower list (e.g. `agents: [cline]`), but cannot widen beyond what loki
+supports. The skills section thus never drifts from the orchestration section.
+
 ## Why stock debian + init script (not a custom image)
 
 * **Faster iteration.** Changing the manifest (packages, provider CLIs) does not
