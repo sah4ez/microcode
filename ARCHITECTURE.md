@@ -163,6 +163,34 @@ network:
 See [`examples/allowlist.yaml`](examples/allowlist.yaml) and
 [`examples/full-stack.yaml`](examples/full-stack.yaml) for complete setups.
 
+## External loki memory (persistent volume)
+
+loki-mode keeps its cross-project learnings in a local store under its memory
+base path (SQLite + FTS5, by default `~/.loki`). Inside an ephemeral microVM
+that store is lost every time the VM is destroyed/recreated.
+
+`loki.memory.storage` moves the store onto a **microsandbox named volume** that
+persists on the host across VM lifecycles:
+
+```yaml
+loki:
+  memory:
+    enabled: true
+    managed: true
+    storage:
+      enabled: true            # mount the volume + set LOKI_MEMORY_BASE_PATH
+      volume: loki-memory      # named volume (created/reused by msb)
+      dest: /data/loki-memory  # guest path = LOKI_MEMORY_BASE_PATH
+```
+
+What microcode does when `storage.enabled`:
+* mounts the named volume at `dest` (`msb create ... -v loki-memory:/data/loki-memory`) — added automatically, no need to duplicate it under `sandbox.volumes`;
+* sets `LOKI_MEMORY_BASE_PATH=<dest>` in both the generated `loki.env` and the
+  `msb exec ... loki start` invocation (via `-e`).
+
+The volume lives under microsandbox's volume directory on the host and survives
+`microcode destroy` + `apply` cycles, so loki accumulates learnings across runs.
+
 ## Secret handling
 
 ```yaml

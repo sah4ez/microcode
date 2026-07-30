@@ -112,11 +112,33 @@ class QualityGates(BaseModel):
     opt_out: list[str] = Field(default_factory=list)
 
 
+class LokiMemoryStorage(BaseModel):
+    """External (persistent) memory storage for loki-mode.
+
+    When enabled, loki's memory base path (``LOKI_MEMORY_BASE_PATH``) is pointed
+    at a microsandbox named volume mounted into the VM. The volume persists
+    across VM destroy/recreate cycles, so cross-project learnings survive.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="mount a named volume and point LOKI_MEMORY_BASE_PATH at it",
+    )
+    volume: str = Field(default="loki-memory", description="named volume name")
+    dest: str = Field(
+        default="/data/loki-memory",
+        description="guest mount path = LOKI_MEMORY_BASE_PATH",
+    )
+
+
 class LokiMemory(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
     managed: bool = Field(default=True, description="LOKI_MANAGED_MEMORY")
+    storage: LokiMemoryStorage = Field(default_factory=LokiMemoryStorage)
 
 
 class LokiProofs(BaseModel):

@@ -54,6 +54,10 @@ def _loki_env(m: PlatformManifest) -> str:
         lines.append("# ANTHROPIC_API_KEY injected via msb --secret (not inlined)")
     elif l.provider == "codex":
         lines.append("# OPENAI_API_KEY injected via msb --secret (not inlined)")
+    # external (persistent) memory: point loki at a mounted named volume so
+    # cross-project learnings survive VM destroy/recreate cycles.
+    if l.memory.storage.enabled:
+        lines.append(f"LOKI_MEMORY_BASE_PATH={l.memory.storage.dest}")
     return "\n".join(lines) + "\n"
 
 

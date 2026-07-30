@@ -46,6 +46,14 @@ def _create_argv(m: PlatformManifest, bootstrap_guest: str) -> list[str]:
     for v in s.volumes:
         argv += ["-v", f"{v.name}:{v.dest}"]
 
+    # auto-mount the loki external memory volume when enabled (so users only
+    # configure it once under loki.memory.storage, not duplicated in volumes).
+    if m.loki.memory.storage.enabled:
+        st = m.loki.memory.storage
+        already = any(v.name == st.volume for v in s.volumes)
+        if not already:
+            argv += ["-v", f"{st.volume}:{st.dest}"]
+
     # bind mounts
     for mt in s.mounts:
         spec = f"{mt.host}:{mt.dest}"

@@ -35,6 +35,12 @@ loki:
   memory:
     enabled: true
     managed: true
+    # external persistent memory: loki writes its learnings store to a mounted
+    # named volume, so cross-project memory survives VM destroy/recreate.
+    storage:
+      enabled: true
+      volume: loki-memory
+      dest: /data/loki-memory
   proofs:
     enabled: true
   provider_clis: [claude]

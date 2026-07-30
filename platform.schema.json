@@ -80,7 +80,17 @@
           "additionalProperties": false,
           "properties": {
             "enabled": { "type": "boolean" },
-            "managed": { "type": "boolean" }
+            "managed": { "type": "boolean" },
+            "storage": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "External persistent memory via a mounted named volume (LOKI_MEMORY_BASE_PATH)",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "volume": { "type": "string" },
+                "dest": { "type": "string" }
+              }
+            }
           }
         },
         "proofs": {

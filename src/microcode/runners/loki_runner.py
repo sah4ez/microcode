@@ -40,6 +40,10 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
         val = expand_env("${" + var + "}")
         if val:
             argv += ["-e", f"{var}={val}"]
+    # external memory: loki reads LOKI_MEMORY_BASE_PATH and writes to the
+    # mounted named volume (persists across VM destroy/recreate).
+    if m.loki.memory.storage.enabled:
+        argv += ["-e", f"LOKI_MEMORY_BASE_PATH={m.loki.memory.storage.dest}"]
     argv += ["--", "bash", "-lc", inner]
     return argv
 
