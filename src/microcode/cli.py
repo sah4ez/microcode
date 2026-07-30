@@ -164,6 +164,7 @@ def build(
         if dry_run:
             logging_utils.warn("dry-run: nothing was executed")
         else:
+            snap_name = m.sandbox.init.snapshot.name
             logging_utils.ok(
                 f"snapshot '{snap_name}' built. Set "
                 f"snapshot.from_snapshot: {snap_name} and run `microcode apply` to reuse it."
