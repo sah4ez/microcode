@@ -1,0 +1,135 @@
+# microcode — пример: cline + несколько skill-провайдеров внутри VM.
+#
+# Один манифест декларативно описывает:
+#   1. НАВЫКИ из РАЗНЫХ источников (obra/superpowers с GitHub + локальные
+#      overlay-модули), устанавливаемые/переводимые ВНУТРИ VM (skills.in_vm),
+#      + кастомные скилл-модули loki поверх встроенных.
+#   2. ОРКЕСТРАЦИЮ: loki с provider cline на модели GLM (z.ai), суженный SDLC
+#      (effort: standard), кастомные гейты, кросс-проектная память.
+#   3. СРЕДУ: stock debian VM, allowlist-сеть (только z.ai + npm + pypi),
+#      результат в примонтированном src/.
+#
+# Поток данных:
+#   platform.yaml
+#     │  microcode apply
+#     ├─ skills (in VM): msb exec ... skillkit install obra/superpowers ...
+#     │                  + translate → cline SKILL.md в skills/
+#     ├─ overlay модули: ./custom-skills → /workspace/skills (mount)
+#     ├─ sandbox:        msb create debian + bootstrap.sh (node/loki/cline/shim)
+#     └─ loki (in VM):   loki --provider cline --model glm-5.2 PRD.md
+#                          читает skills/00-index.md (наш overlay)
+#                          → строит сервис в /workspace (виден на хосте как src/)
+#
+# Запуск:
+#   export ZAI_BUSINESS_BASE_URL="https://api.z.ai" \
+#          ZAI_OAUTH_ORIGIN="https://chat.z.ai" \
+#          ZAI_OAUTH_CLIENT_ID="client_..."   # (см. README, не в манифесте!)
+#   microcode apply examples/cline-multi-skills/platform.yaml
+
+version: 1
+
+project:
+  name: notes-api
+  workdir: /workspace
+  state_dir: .microcode
+
+# ───────────────────────────────────────────────────────────────────────── #
+# SKILLS — навыки из РАЗНЫХ провайдеров, устанавливаемые ВНУТРИ VM.         #
+# ───────────────────────────────────────────────────────────────────────── #
+skills:
+  in_vm: true                         # skillkit бежит внутри VM (после bootstrap),
+                                     # не на хосте — единое окружение с loki.
+  agents: [cline]                    # фиксированный набор = провайдеры loki 1:1.
+
+  # (1) GitHub-source: публичный репо скиллов (obra/superpowers).
+  #     skillkit клонирует/тянет нужные скиллы и переводит под cline.
+  install:
+    - source: obra/superpowers
+      skills:
+        - test-driven-development    # RED-GREEN-REFACTOR
+        - systematic-debugging       # 4-фазный root-cause перед фиксом
+        - verification-before-completion  # пруфы готовности
+        - writing-plans              # bite-sized план
+        - executing-plans            # пошаговая реализация
+
+  # (2) Локальные overlay-модули loki (не через skillkit) монтируются отдельно
+  #     в sandbox.mounts ниже (./custom-skills → /workspace/skills). Они
+  #     дополняют/переопределяют встроенные модули loki: 00-index.md +
+  #     tdd-rules.md + security-checks.md + api-contract-rules.md.
+
+  translate:
+    target_agent: cline              # все скиллы переводятся под формат cline
+    output_dir: skills               # → skills/ (примонтировано в VM)
+    also_into_memory: true           # зеркалим SKILL.md в .loki/memory/skills/
+
+# ───────────────────────────────────────────────────────────────────────── #
+# LOKI — оркестрация: cline + GLM, суженный SDLC, кастомные гейты.          #
+# ───────────────────────────────────────────────────────────────────────── #
+loki:
+  provider: cline                    # loki вызывает cline CLI (node-shim в VM)
+  model: glm-5.2                     # модель z.ai (→ CLINE_MODEL + LOKI_MODEL_OVERRIDE)
+  max_iterations: 15
+  max_budget_usd: 5.0
+  effort: standard                   # 6 фаз SDLC (без DEEPEN_PLAN можно low)
+  sdk_mode: full
+  quality_gates:
+    enabled: true
+    opt_out:
+      - magic_debate                 # нет UI — Gate 8 не нужен
+  memory:
+    enabled: true
+    managed: true
+    storage:                         # кросс-проектная память (volume)
+      enabled: true
+      volume: loki-memory
+      dest: /data/loki-memory
+  proofs:
+    enabled: true                    # evidence-receipts в .loki/proofs/
+  provider_clis: [cline]             # bootstrap ставит только cline (+ shim)
+  config_overrides:
+    # стартуем со стадии разработки (PRD уже готов, design тривиален)
+    start_phase: DEVELOPMENT
+
+# ───────────────────────────────────────────────────────────────────────── #
+# SANDBOX — stock debian, allowlist-сеть, overlay skills, результат в src/. #
+# ───────────────────────────────────────────────────────────────────────── #
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: notes-build
+  cpus: 2
+  memory: 2048
+
+  network:
+    # allowlist: запрет по умолчанию. VM ходит только к явно разрешённым хостам.
+    # cline/node-shim использует zai-coding-plan OAuth → нужен api.z.ai.
+    mode: allowlist
+    default_egress: deny
+    allow:
+      # LLM-провайдер (z.ai / GLM) — OAuth endpoint cline
+      - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
+      - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      # apt (bootstrap ставит пакеты)
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: "*.debian.org", proto: tcp, port: 443 }
+      # npm (node, loki-mode, cline, @cline/core)
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      # GitHub (skillkit тянет obra/superpowers; git clone)
+      - { action: allow, target: github.com, proto: tcp, port: 443 }
+      - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
+      # node tarball (bootstrap качает node)
+      - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+
+  init:
+    packages:
+      apt: [curl, git, ca-certificates, python3, python3-pip, python3-venv, unzip]
+
+  mounts:
+    # (A) overlay скилл-модули loki — ДОПОЛНЯТ/ПЕРЕОПРЕДЕЛЯЮТ встроенные.
+    #     loki читает /workspace/skills/00-index.md → грузит наши модули по фазе.
+    - { host: ./custom-skills, dest: /workspace/skills, readonly: false }
+    # (B) рабочая директория — результат выполнения loki сохраняется на хосте.
+    - { host: ./src, dest: /workspace, readonly: false }
+
+  ports:
+    - "8000:8000"                    # notes-API будет слушать тут

@@ -101,7 +101,11 @@ sandbox:                      # → microsandbox
 Full reference: [`platform.schema.json`](platform.schema.json) and
 [`examples/`](examples/) (`minimal.yaml`, `allowlist.yaml`, `full-stack.yaml`,
 `todo-api-cline/` — полный end-to-end пример: todo-сервис через provider cline
-+ GLM/z.ai с пошаговым гайдом и найденными обходами).
++ GLM/z.ai с пошаговым гайдом и найденными обходами;
+`cline-multi-skills/` — cline + несколько skill-провайдеров внутри VM +
+кастомные overlay-модули loki). See also
+[`docs/extending-loki.md`](docs/extending-loki.md) — how to extend/replace
+loki skills and tailor the SDLC phases.
 
 ### Skills provisioning: host vs in-VM
 
