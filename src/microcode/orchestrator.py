@@ -40,10 +40,18 @@ def write_artifacts(plan: Plan, artifacts_dir: Path) -> None:
         shutil.copy2(shim_src, artifacts_dir / "cline-node-shim.cjs")
 
 
-def doctor() -> list[str]:
-    """Return a list of human-readable status lines; raise on missing tools."""
+def doctor(m: PlatformManifest | None = None) -> list[str]:
+    """Return a list of human-readable status lines; raise on missing tools.
+
+    ``msb`` is always required. ``skillkit`` is only required on the host when
+    skills run on the host (``skills.in_vm=false``); when ``in_vm=true`` it is
+    installed *inside* the VM by bootstrap.sh and need not exist on the host.
+    """
     problems: list[str] = []
-    for tool in ("msb", "skillkit"):
+    # skillkit is a host dependency only in the host-skills mode.
+    skillkit_on_host = not (m and m.skills.in_vm and m.skills.enabled)
+    tools = ("msb", "skillkit") if skillkit_on_host else ("msb",)
+    for tool in tools:
         path = which(tool)
         if path:
             logging_utils.ok(f"{tool}: {path}")
@@ -67,7 +75,7 @@ def apply(
 
     if not skip_doctor and not dry_run:
         logging_utils.step("Checking dependencies")
-        doctor()
+        doctor(m)
 
     logging_utils.step("Building plan")
     plan = build_plan(m, prd=prd)
@@ -80,15 +88,28 @@ def apply(
         write_artifacts(plan, artifacts_dir)
         logging_utils.ok(f"artifacts written to {artifacts_dir}")
 
-    # 1) skillkit on host
-    logging_utils.step("Provisioning skills (skillkit)")
-    SkillkitRunner(cwd=str(root)).run(plan.skillkit_commands, dry_run=dry_run)
+    # Phase ordering depends on where skillkit runs:
+    #   * host (skills.in_vm=false): skills first, then sandbox, then loki.
+    #   * in-VM (skills.in_vm=true):  the skillkit commands are already wrapped
+    #     in `msb exec`, so the VM must exist+be bootstrapped first. We run
+    #     sandbox, then skillkit (inside it), then loki.
+    in_vm = m.skills.in_vm and m.skills.enabled
+
+    if not in_vm:
+        # 1) skillkit on host
+        logging_utils.step("Provisioning skills (skillkit on host)")
+        SkillkitRunner(cwd=str(root)).run(plan.skillkit_commands, dry_run=dry_run)
 
     # 2) sandbox: create + init (+ snapshot)
     logging_utils.step("Provisioning sandbox (microsandbox)")
     SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
         plan.sandbox_commands, dry_run=dry_run
     )
+
+    if in_vm:
+        # skillkit commands are wrapped in `msb exec`; the VM now exists.
+        logging_utils.step("Provisioning skills (skillkit inside the VM)")
+        SkillkitRunner(cwd=str(root)).run(plan.skillkit_commands, dry_run=dry_run)
 
     # 3) loki inside VM
     logging_utils.step("Starting loki-mode inside the VM")

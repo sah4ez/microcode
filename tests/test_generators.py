@@ -73,6 +73,38 @@ def test_skills_tap_commands_emitted():
     assert ["skillkit", "tap", "add", "myorg/internal"] in res.commands
 
 
+def test_skills_in_vm_wraps_commands_in_msb_exec():
+    m = _m(
+        sandbox={"name": "vm-1", "init": {"packages": {"node_version": "22"}}},
+        skills={
+            "in_vm": True,
+            "install": [{"source": "anthropics/skills", "skills": ["x"]}],
+        },
+    )
+    res = generate_skills(m)
+    # no bare skillkit commands — every command runs via msb exec inside the VM
+    assert res.commands, "expected wrapped commands"
+    for c in res.commands:
+        assert c[:3] == ["msb", "exec", "vm-1"]
+        assert "--user" in c and "loki" in c
+        assert c[-2] == "-lc"
+    # the inner bash command still contains the skillkit invocation
+    inner_joined = " ".join(c[-1] for c in res.commands)
+    assert "skillkit" in inner_joined
+    # the in-VM note is surfaced
+    assert any("in_vm" in n for n in res.notes)
+
+
+def test_skills_host_mode_does_not_wrap():
+    # default in_vm=false: commands stay bare skillkit argv (run on the host)
+    m = _m(skills={"install": [{"source": "anthropics/skills", "skills": ["x"]}]})
+    res = generate_skills(m)
+    assert res.commands
+    for c in res.commands:
+        assert c[0] == "skillkit"
+    assert not any("in_vm" in n for n in res.notes)
+
+
 # ---- loki ----------------------------------------------------------------- #
 
 def test_loki_emits_config_and_env():

@@ -54,6 +54,7 @@ One file, three sections:
 version: 1
 
 skills:                       # → skillkit
+  in_vm: false                # true → run skillkit inside the VM (after bootstrap)
   install:
     - { source: anthropics/skills, skills: [code-review], agents: [claude-code] }
   translate: { target_agent: claude-code, output_dir: skills }
@@ -82,6 +83,22 @@ Full reference: [`platform.schema.json`](platform.schema.json) and
 [`examples/`](examples/) (`minimal.yaml`, `allowlist.yaml`, `full-stack.yaml`,
 `todo-api-cline/` — полный end-to-end пример: todo-сервис через provider cline
 + GLM/z.ai с пошаговым гайдом и найденными обходами).
+
+### Skills provisioning: host vs in-VM
+
+By default skillkit runs on the **host** (before the VM exists). Set
+`skills.in_vm: true` to run it **inside** the microsandbox VM instead:
+
+```yaml
+skills:
+  in_vm: true
+  install: [{ source: anthropics/skills, skills: [code-review] }]
+```
+
+In that mode `apply` creates + bootstraps the VM first, then runs each
+`skillkit` command as `msb exec <name> --user loki -- bash -lc '... skillkit ...'`.
+Skills are provisioned in the exact environment loki will use (same node and
+`@skillkit/cli` version). `doctor` then no longer requires `skillkit` locally.
 
 ### Network allow/deny lists
 

@@ -56,3 +56,18 @@ def test_plan_all_commands_groups_in_order():
     assert msb_idx is not None
     for c in cmds[:msb_idx]:
         assert c[0] in ("skillkit",)  # skillkit phase before msb phase
+
+
+def test_plan_in_vm_skillkit_commands_run_inside_vm():
+    # in_vm=true: skillkit commands are wrapped as msb exec, so they live in the
+    # sandbox phase, not as bare host skillkit commands.
+    p = build_plan(
+        _m(skills={"in_vm": True, "install": [{"source": "a/b", "skills": ["x"]}]}),
+    )
+    # no bare skillkit command at all
+    assert not any(c[0] == "skillkit" for c in p.all_commands())
+    # skillkit commands are msb exec <name> -- bash -lc '... skillkit ...'
+    assert p.skillkit_commands
+    for c in p.skillkit_commands:
+        assert c[:2] == ["msb", "exec"]
+        assert "skillkit" in c[-1]

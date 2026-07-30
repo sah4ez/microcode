@@ -93,6 +93,15 @@ class SkillsConfig(BaseModel):
         default=True,
         description="skip the entire skills provisioning phase when false",
     )
+    in_vm: bool = Field(
+        default=False,
+        description=(
+            "run skillkit inside the microsandbox VM (via msb exec) instead of "
+            "on the host. When true, the VM is created+bootstrapped first, then "
+            "skillkit install/translate run inside it, so skills are provisioned "
+            "in the exact environment loki will use. Default false (host)."
+        ),
+    )
     registry: SkillRegistry = Field(default_factory=SkillRegistry)
     install: list[SkillInstall] = Field(default_factory=list)
     translate: SkillTranslate = Field(default_factory=SkillTranslate)

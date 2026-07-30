@@ -1,0 +1,46 @@
+# Example: provision skills INSIDE the microsandbox VM.
+#
+# With skills.in_vm: true, microcode skips running skillkit on the host and
+# instead runs every skillkit install/translate command inside the VM (via
+# `msb exec --user loki -- bash -lc '... skillkit ...'`) AFTER the VM is created
+# and bootstrapped. Skills land in the same node/@skillkit/cli environment loki
+# will use. doctor no longer requires skillkit on the host.
+#
+# Phase order with in_vm: doctor -> plan -> artifacts -> sandbox(create+init)
+# -> skillkit(inside VM) -> loki.
+
+version: 1
+
+project:
+  name: skills-in-vm
+  workdir: /workspace
+
+skills:
+  in_vm: true                       # <-- run skillkit inside the VM
+  install:
+    - source: anthropics/skills
+      skills: [code-review]
+      agents: [claude-code]
+  translate:
+    target_agent: claude-code
+    output_dir: skills
+
+loki:
+  provider: claude
+  max_iterations: 20
+  max_budget_usd: 5.0
+
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: skills-in-vm-build
+  cpus: 2
+  memory: 2048
+  network:
+    mode: profile
+    profile: [public]              # skillkit install needs registry.npmjs.org + github
+  init:
+    packages:
+      npm_global: [loki-mode, "@skillkit/cli"]
+  mounts:
+    - { host: ./src, dest: /workspace, readonly: false }

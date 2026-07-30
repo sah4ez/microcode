@@ -21,6 +21,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "enabled": { "type": "boolean" },
+        "in_vm": {
+          "type": "boolean",
+          "description": "run skillkit inside the microsandbox VM (msb exec) instead of on the host"
+        },
         "registry": {
           "type": "object",
           "additionalProperties": false,

@@ -6,14 +6,46 @@ Produces:
 
 The translated ``SKILL.md`` files are written by skillkit itself into
 ``skills.translate.output_dir`` (then mounted into the VM).
+
+Two execution sites:
+
+* **Host** (default, ``skills.in_vm=false``): bare ``skillkit ...`` argv lists
+  run by :class:`~microcode.runners.skillkit_runner.SkillkitRunner` on the host
+  *before* the sandbox is created.
+* **In-VM** (``skills.in_vm=true``): each command is wrapped in
+  ``msb exec <name> --user loki -- bash -lc '<env-prefix> && skillkit ...'`` so
+  skillkit runs inside the already-bootstrapped microsandbox VM. This runs
+  *after* sandbox create+init (the orchestrator reorders the phases).
 """
 
 from __future__ import annotations
 
 import json
+import shlex
 
 from microcode.generators.base import GeneratedArtifact, GenerationResult
 from microcode.manifest import PlatformManifest
+
+
+def _in_vm_prefix(m: PlatformManifest) -> str:
+    """PATH/HOME prefix for skillkit commands run as the VM's ``loki`` user.
+
+    Mirrors the loki runner prefix so the same npm-global tooling is visible.
+    """
+    nver = m.sandbox.init.packages.node_version
+    return (
+        f"export PATH=/opt/npm-global/bin:/opt/node{nver}/bin:/usr/local/bin:/usr/bin:$PATH "
+        f"&& export HOME=/home/loki && cd /workspace"
+    )
+
+
+def _wrap_in_vm(cmd: list[str], m: PlatformManifest) -> list[str]:
+    """Wrap a bare ``skillkit ...`` argv as ``msb exec ... -- bash -lc '...'``."""
+    inner = f"{_in_vm_prefix(m)} && " + " ".join(shlex.quote(t) for t in cmd)
+    return [
+        "msb", "exec", m.sandbox.name, "--user", "loki",
+        "--", "bash", "-lc", inner,
+    ]
 
 
 def _build_skills_manifest(m: PlatformManifest) -> dict:
@@ -99,4 +131,10 @@ def generate_skills(m: PlatformManifest) -> GenerationResult:
             "after translate, mirror SKILL.md files into .loki/memory/skills/ "
             "(handled by sandbox mount of the same skills dir)"
         )
+    if skills.in_vm:
+        notes.append(
+            "skills.in_vm=true: skillkit runs inside the microsandbox VM via "
+            "msb exec; the orchestrator creates+bootstraps the VM first"
+        )
+        commands = [_wrap_in_vm(c, m) for c in commands]
     return GenerationResult(artifacts=artifacts, commands=commands, notes=notes)

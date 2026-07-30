@@ -76,6 +76,22 @@ platform.yaml  ──(read+validate)──►  Planner
 8. **msb exec loki start** — `loki start --config /workspace/.microcode/artifacts/loki-config.yaml
    --no-dashboard --simple <prd>`. Config + skills are available via the mount.
 
+### Optional: skillkit inside the VM (`skills.in_vm: true`)
+
+By default skillkit runs on the **host** (step 4). Set `skills.in_vm: true` to
+instead run it **inside** the microsandbox VM. In that mode:
+
+* step 4 is skipped on the host (`doctor` no longer requires `skillkit` locally);
+* each `skillkit install`/`translate` command is wrapped as
+  `msb exec <name> --user loki -- bash -lc '<env-prefix> && skillkit ...'` and
+  runs **after** steps 5–6 (the VM must exist and be bootstrapped);
+* skills are provisioned in the exact environment loki will use (same node,
+  same `@skillkit/cli` version installed by `bootstrap.sh`).
+
+Phase order becomes: doctor → plan → artifacts → **sandbox (create+init)** →
+**skillkit (in VM)** → loki. The translated `SKILL.md` files still land in the
+mounted `skills/` dir, so nothing else changes.
+
 ## Why stock debian + init script (not a custom image)
 
 * **Faster iteration.** Changing the manifest (packages, provider CLIs) does not
