@@ -343,6 +343,32 @@ def test_sandbox_from_snapshot_omits_root_disk():
     assert "--root-disk" not in run
 
 
+def test_sandbox_from_snapshot_converts_bind_mounts_to_named_volumes():
+    # msb can't bind-mount host paths with --from-snapshot; convert to named
+    # volumes and seed via msb cp in the runner.
+    from microcode.generators.sandbox import from_snapshot_mount_map
+
+    m = _m(sandbox={
+        "name": "sb1",
+        "mounts": [
+            {"host": "./src", "dest": "/workspace"},
+            {"host": "./custom-skills", "dest": "/workspace/skills"},
+        ],
+        "init": {"snapshot": {"from_snapshot": "mcd-base"}},
+    })
+    res = generate_sandbox(m)
+    run = res.commands[0]
+    vols = [run[i + 1] for i, t in enumerate(run) if t == "-v"]
+    # all volumes are named (no host:path bind mounts)
+    assert all(":" in v and not v.startswith(".") for v in vols)
+    assert "mcd-workspace:/workspace" in vols
+    assert "mcd-workspace-skills:/workspace/skills" in vols
+    # mount map returns raw host paths for msb cp seeding
+    mmap = from_snapshot_mount_map(m)
+    dests = {g for _, _, g in mmap}
+    assert dests == {"/workspace", "/workspace/skills"}
+
+
 def test_sandbox_create_emits_root_disk():
     # msb create WITH an OCI image accepts --root-disk
     m = _m(sandbox={"name": "sb1", "root_disk": "8G"})

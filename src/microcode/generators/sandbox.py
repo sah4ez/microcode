@@ -97,6 +97,25 @@ def _stop_argv(m: PlatformManifest) -> list[str]:
     return ["msb", "stop", m.sandbox.name]
 
 
+def _bind_to_volume_name(dest: str) -> str:
+    """Derive a stable named-volume name from a guest dest path.
+
+    e.g. /workspace -> mcd-workspace, /workspace/skills -> mcd-workspace-skills
+    """
+    cleaned = dest.strip("/").replace("/", "-") or "root"
+    return f"mcd-{cleaned}"
+
+
+def from_snapshot_mount_map(m: PlatformManifest) -> list[tuple[str, str, str]]:
+    """Return [(host_path, volume_name, guest_dest)] for each bind mount.
+
+    Used by the runner to seed named volumes via `msb cp` after booting from a
+    snapshot (msb can't bind-mount host paths with --from-snapshot). Host paths
+    are returned RAW; the caller resolves them against the project root.
+    """
+    return [(mt.host, _bind_to_volume_name(mt.dest), mt.dest) for mt in m.sandbox.mounts]
+
+
 def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
     """Boot a fresh sandbox from an existing snapshot via ``msb run``.
 
@@ -104,6 +123,9 @@ def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
     but starts from the snapshot's filesystem (tools already installed) instead
     of the base image. ``--from-snapshot`` is mutually exclusive with the image
     positional and with ``--copy-file`` bootstrap, so neither is emitted.
+
+    Bind mounts are converted to named volumes (msb can't bind-mount with
+    --from-snapshot); the runner seeds them via `msb cp` after boot.
     """
     s = m.sandbox
     argv = ["msb", "run", "--from-snapshot", s.init.snapshot.from_snapshot]
@@ -135,11 +157,12 @@ def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
         already = any(v.name == st.volume for v in s.volumes)
         if not already:
             argv += ["-v", f"{st.volume}:{st.dest}"]
+    # bind mounts: msb does NOT support bind mounts with --from-snapshot
+    # ("mount: Not a directory"). Convert each to a NAMED VOLUME and seed it
+    # via `msb cp` in the runner. Volume name is derived from the dest path.
     for mt in s.mounts:
-        spec = f"{mt.host}:{mt.dest}"
-        if mt.readonly:
-            spec += ":ro"
-        argv += ["-v", spec]
+        vol_name = _bind_to_volume_name(mt.dest)
+        argv += ["-v", f"{vol_name}:{mt.dest}"]
 
     for p in s.ports:
         argv += ["-p", p]

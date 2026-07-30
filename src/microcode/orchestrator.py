@@ -115,6 +115,25 @@ def apply(
         plan.sandbox_commands, dry_run=dry_run
     )
 
+    # When booting from a snapshot, bind mounts become named volumes (msb can't
+    # bind-mount with --from-snapshot). Seed each volume from its host dir via
+    # `msb cp` so the VM sees the same files as a normal bind mount would.
+    if not dry_run and m.sandbox.init.snapshot.from_snapshot:
+        from microcode.generators.sandbox import from_snapshot_mount_map
+        from pathlib import Path as _P
+
+        runner = SkillkitRunner(cwd=str(root))
+        for host_path, _vol, guest_dest in from_snapshot_mount_map(m):
+            src = _P(root) / host_path if not _P(host_path).is_absolute() else _P(host_path)
+            if not src.exists():
+                continue
+            # cp into the VM at the guest dest (volume root); recursive for dirs.
+            logging_utils.step(f"Seeding volume {guest_dest} from {src}")
+            try:
+                runner.run([["msb", "cp", str(src), f"{m.sandbox.name}:{guest_dest}"]])
+            except RunnerError as e:
+                logging_utils.warn(f"could not seed {guest_dest}: {e}")
+
     if in_vm:
         # skillkit commands are wrapped in `msb exec`; the VM now exists.
         logging_utils.step("Provisioning skills (skillkit inside the VM)")
