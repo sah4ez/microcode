@@ -7,8 +7,9 @@ project:
 
 # Skills already installed into ./src/.cline/skills via skillkit (obra/superpowers,
 # translated for the cline agent). They are visible inside the VM via the mount
-# below. We keep the skills section minimal because provisioning already happened.
+# below. Provisioning already happened out of band, so we disable the phase here.
 skills:
+  enabled: false
   registry:
     sources: [obra/superpowers]
   install: []
@@ -47,7 +48,10 @@ sandbox:
       - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
       - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
       # package/registry fetches during bootstrap.sh
+      # debian bookworm sources use http (port 80) + https (443) mirrors
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 80 }
       - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: security.debian.org, proto: tcp, port: 80 }
       - { action: allow, target: security.debian.org, proto: tcp, port: 443 }
       - { action: allow, target: deb.nodesource.com, proto: tcp, port: 443 }
       - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
@@ -75,14 +79,20 @@ sandbox:
         fi
     snapshot:
       enabled: false
-  # GLM token referenced by name; real value comes from the host environment.
-  # It is passed into the VM via env (cline reads it during bootstrap auth).
+  # Provider auth: the cline node-shim uses cline's built-in zai-coding-plan
+  # provider, which authenticates via z.ai OAuth (ZAI_OAUTH_* env). These are
+  # read from the host environment and passed into the VM via env.
   env:
     GLM_API_KEY: "${GLM_API_KEY}"
+    ZAI_BUSINESS_BASE_URL: "${ZAI_BUSINESS_BASE_URL}"
+    ZAI_OAUTH_CLIENT_ID: "${ZAI_OAUTH_CLIENT_ID}"
+    ZAI_OAUTH_ORIGIN: "${ZAI_OAUTH_ORIGIN}"
   mounts:
     # the whole working dir (skills + src + state) is visible inside the VM
     - host: .
       dest: /workspace
       readonly: false
   ports: [8000:8000, 57374:57374]
-  user: root
+  user: root             # VM create/init run as root (the 'loki' user is created by bootstrap)
+                          # NOTE: loki start itself runs as 'loki' (see planner) so provider
+                          # CLIs accept --dangerously-skip-permissions.

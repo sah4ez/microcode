@@ -87,8 +87,9 @@ def network_argv(net: NetworkConfig) -> list[str]:
     tokens: list[str] = []
     if net.mode == "allowlist":
         tokens += [rule_token(r) for r in net.allow]
-        # always allow DNS resolution, otherwise nothing resolves
-        tokens.append("allow@dns")
+        # NOTE: microsandbox auto-provides narrow DNS resolution in allowlist
+        # mode, so we do NOT emit an explicit dns rule (the `dns` CLI target is
+        # rejected by msb 0.6.x and is unnecessary here).
         # black-list convenience still applies (explicit denies win by order)
         tokens += deny_domain_tokens + deny_suffix_tokens
     else:  # denylist

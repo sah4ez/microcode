@@ -42,6 +42,14 @@ def generate_skills(m: PlatformManifest) -> GenerationResult:
     artifacts: list[GeneratedArtifact] = []
     commands: list[list[str]] = []
 
+    # disabled skills phase (e.g. skills already provisioned out of band)
+    if not skills.enabled:
+        return GenerationResult(
+            artifacts=[],
+            commands=[],
+            notes=["skills phase disabled (skills.enabled=false); provisioned out of band"],
+        )
+
     # 1) The .skills manifest (declarative install plan)
     manifest_obj = _build_skills_manifest(m)
     artifacts.append(
@@ -65,15 +73,25 @@ def generate_skills(m: PlatformManifest) -> GenerationResult:
             cmd += ["--agent", a]
         commands.append(cmd)
 
-    # 4) Translate everything into the single target format.
-    translate_cmd = [
-        "skillkit", "translate", "--all",
-        "--to", skills.translate.target_agent,
-        "--output", skills.translate.output_dir,
-    ]
-    if skills.translate.force:
-        translate_cmd.append("--force")
-    commands.append(translate_cmd)
+    # 4) Translate the explicitly installed skills into the single target format.
+    #    We translate by name (not --all) so unrelated global skills don't collide,
+    #    and always pass --force so re-runs are idempotent.
+    installed_names = []
+    for inst in skills.install:
+        installed_names.extend(inst.skills or [])
+    if installed_names:
+        for name in installed_names:
+            translate_cmd = [
+                "skillkit", "translate", name,
+                "--to", skills.translate.target_agent,
+                "--output", skills.translate.output_dir,
+                "--force",
+            ]
+            commands.append(translate_cmd)
+    else:
+        # nothing explicit to translate — skip rather than --all (which would pull
+        # in unrelated global skills and may collide)
+        pass
 
     notes: list[str] = []
     if skills.translate.also_into_memory:

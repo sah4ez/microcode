@@ -37,12 +37,34 @@ def test_skills_generates_manifest_and_install_and_translate():
     assert any(c[:2] == ["skillkit", "translate"] for c in res.commands)
 
 
-def test_skills_translate_has_target_and_output():
+def test_skills_translate_targets_named_skills_with_force():
+    m = _m(skills={
+        "install": [{"source": "anthropics/skills", "skills": ["a", "b"]}],
+        "translate": {"target_agent": "cursor", "output_dir": "out"},
+    })
+    res = generate_skills(m)
+    trs = [c for c in res.commands if c[:2] == ["skillkit", "translate"]]
+    # one translate per named skill, with --force and target/output
+    assert len(trs) == 2
+    for tr in trs:
+        assert "--to" in tr and "cursor" in tr
+        assert "--output" in tr and "out" in tr
+        assert "--force" in tr
+    names = {tr[2] for tr in trs}
+    assert names == {"a", "b"}
+
+
+def test_skills_translate_skipped_without_named_skills():
     m = _m(skills={"translate": {"target_agent": "cursor", "output_dir": "out"}})
     res = generate_skills(m)
-    tr = next(c for c in res.commands if c[:2] == ["skillkit", "translate"])
-    assert "--to" in tr and "cursor" in tr
-    assert "--output" in tr and "out" in tr
+    assert not any(c[:2] == ["skillkit", "translate"] for c in res.commands)
+
+
+def test_skills_disabled_emits_nothing():
+    m = _m(skills={"enabled": False, "install": [{"source": "x/y", "skills": ["z"]}]})
+    res = generate_skills(m)
+    assert res.artifacts == []
+    assert res.commands == []
 
 
 def test_skills_tap_commands_emitted():
@@ -89,9 +111,15 @@ def test_bootstrap_is_bash_with_set_e_and_packages():
     bs = generate_bootstrap(m).artifacts[0].content
     assert bs.startswith("#!/usr/bin/env bash")
     assert "set -euo pipefail" in bs
-    assert "apt-get install -y -qq 'curl'" in bs
+    assert "apt-get install -y 'curl'" in bs
     assert "npm install -g 'loki-mode'" in bs
-    assert "setup_22.x" in bs
+    # node: bootstrap via debian nodejs + npm tarball, then upgrade via `n`
+    assert "apt-get install -y nodejs" in bs
+    assert "registry.npmjs.org/npm/-/npm-10.9.0.tgz" in bs
+    assert "n install 22" in bs
+    # unprivileged user (provider CLIs refuse --dangerously-skip-permissions under root)
+    assert "useradd -m -s /bin/bash loki" in bs
+    assert "/opt/npm-global" in bs
     assert "bun.sh/install" in bs
 
 

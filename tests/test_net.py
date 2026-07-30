@@ -112,8 +112,8 @@ def test_allowlist_mode_is_deny_by_default_plus_allows_and_dns():
     rules = [argv[i + 1] for i, t in enumerate(argv) if t == "--net-rule"]
     assert "allow@api.anthropic.com:tcp:443" in rules
     assert "allow@host" in rules
-    # DNS must be allowed so names resolve
-    assert "allow@dns" in rules
+    # microsandbox auto-provides DNS in allowlist mode; no explicit dns rule
+    assert not any("dns" in r for r in rules)
 
 
 def test_allowlist_mode_appends_explicit_denies():

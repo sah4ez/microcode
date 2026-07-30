@@ -57,10 +57,25 @@ def build_plan(m: PlatformManifest, prd: str | None = None) -> Plan:
     ]
 
     notes = [*skills.notes, *sandbox.notes]
+    # Run loki as the unprivileged 'loki' user (created by bootstrap) so
+    # claude/cline accept --dangerously-skip-permissions (refused under root).
+    # Set PATH/HOME explicitly — a non-root login shell may not source the
+    # bootstrap-written PATH.
+    node_ver = m.sandbox.init.packages.node_version
+    prefix = (
+        f"export PATH=/opt/npm-global/bin:/opt/node{node_ver}/bin:/usr/local/bin:/usr/bin:$PATH "
+        f"&& export HOME=/home/loki && cd /workspace"
+    )
+    loki_inner = (
+        f"{prefix} && loki start --config {GUEST_CONFIG} --no-dashboard --simple"
+        + (f" {prd}" if prd else "")
+    )
     loki_cmd = (
-        ["msb", "exec", m.sandbox.name, "--user", m.sandbox.user, "--",
-         "loki", "start", "--config", GUEST_CONFIG,
-         "--no-dashboard", "--simple", *([prd] if prd else [])]
+        # always run loki as the unprivileged 'loki' user (created by bootstrap),
+        # regardless of sandbox.user (which governs create/init). Provider CLIs
+        # (claude/cline) refuse --dangerously-skip-permissions under root.
+        ["msb", "exec", m.sandbox.name, "--user", "loki", "--",
+         "bash", "-lc", loki_inner]
     )
 
     return Plan(

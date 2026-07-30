@@ -178,6 +178,40 @@ placeholder exists. microsandbox's TLS-intercepting proxy swaps the placeholder
 for the real value *only* for traffic to allow-listed hosts and blocks it
 everywhere else. The manifest never contains a secret value.
 
+## cline provider limitation on arm64 microsandbox VMs
+
+`loki --provider cline` shells out to the `cline` CLI. The cline npm package
+ships a **platform-specific Bun-compiled native binary** (fetched by
+postinstall into `node_modules/@cline/cli-<plat>-<arch>/`). On **arm64
+microsandbox VMs** that Bun runtime crashes during real work:
+
+```
+Bun v1.3.13 (bf2e2cec) Linux arm64
+panic(main thread): Bus error at address 0x920EB5A
+```
+
+`cline --version` succeeds (static path), but any LLM-driven run panics in Bun's
+JIT. This is a Bun/microsandbox-arm64 incompatibility, **not** a node-version
+issue (verified on node 18, 22.5, 22.11, 22.20) and not fixed by disabling ASLR.
+On the host (macOS arm64) cline works because it runs the **darwin-x86_64**
+binary under Rosetta, not the arm64 one.
+
+Workaround options:
+1. **`--provider claude`** (Claude Code) pointed at z.ai's Anthropic-compatible
+   endpoint (`ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic`, model
+   `glm-4.6`). This runs GLM through a stable native binary and is the path used
+   in `examples/` and `todo-run/`.
+2. **`@cline/core` under node** — the core SDK is pure JS (`ClineCore.create()`
+   → `cline.start({prompt})`) and loads under node without Bun. A node-based
+   CLI shim exposed via `CLINE_BIN_PATH` could satisfy loki's `cline` contract,
+   but requires reproducing cline's full CLI/tool behavior through the
+   undocumented core API.
+3. Run an **x86_64 VM** (qemu/Docker emulation) where the cline x86_64 binary is
+   stable.
+
+Until (2) or (3) is implemented, `--provider cline` is **not functional inside
+arm64 microsandbox VMs**; use `--provider claude` + z.ai for GLM.
+
 ## Module layout
 
 ```

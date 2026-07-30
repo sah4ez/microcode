@@ -20,9 +20,13 @@ def test_plan_order_is_skill_then_sandbox_then_loki():
 
     # loki command references the guest config path and the prd
     assert p.loki_command is not None
-    assert GUEST_CONFIG in p.loki_command
-    assert "prd.md" in p.loki_command
-    assert "loki-build" in p.loki_command  # sandbox name
+    joined = " ".join(p.loki_command)
+    assert GUEST_CONFIG in joined
+    assert "prd.md" in joined
+    assert "loki-build" in joined  # sandbox name
+    # loki runs via a login shell so PATH/HOME resolve for the unprivileged user
+    assert "bash" in p.loki_command and "-lc" in p.loki_command
+    assert "loki start" in joined
 
 
 def test_plan_deterministic():
@@ -35,14 +39,20 @@ def test_plan_deterministic():
 def test_plan_without_prd_omits_prd_token():
     p = build_plan(_m())
     assert p.loki_command is not None
-    assert p.loki_command[-1] != ""  # no trailing empty prd
-    # the loki command should not contain a stray prd
-    assert "--simple" in p.loki_command
+    # loki runs via bash -lc; the inner command must reference --simple but no prd
+    inner = p.loki_command[-1]
+    assert "--simple" in inner
+    # without a prd the inner command has no trailing bare argument
+    assert inner.split()[-1] != "None"
 
 
 def test_plan_all_commands_groups_in_order():
     p = build_plan(_m())
     cmds = p.all_commands()
-    # first skillkit commands, then sandbox, then loki
-    assert cmds[0][:1] == ["skillkit"]
+    # sandbox commands, then loki last; skillkit commands (if any) come first
     assert cmds[-1][:3] == ["msb", "exec", "loki-build"]
+    # no skillkit command leaks after a sandbox/msb command
+    msb_idx = next((i for i, c in enumerate(cmds) if c[0] == "msb"), None)
+    assert msb_idx is not None
+    for c in cmds[:msb_idx]:
+        assert c[0] in ("skillkit",)  # skillkit phase before msb phase

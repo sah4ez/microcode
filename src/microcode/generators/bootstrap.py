@@ -26,7 +26,11 @@ def _provider_cli_install_lines(provider_clis: list[str]) -> list[str]:
         "claude": "npm install -g @anthropic-ai/claude-code",
         # codex/codex CLI is installed via npm; name kept generic.
         "codex": "npm install -g @openai/codex",
-        "cline": "npm install -g @anthropic-ai/cline",
+        # NOTE: cline's npm package is just "cline" (not @anthropic-ai/cline).
+        # Its postinstall fetches a platform-specific Bun-compiled native binary.
+        # On arm64 microsandbox VMs that Bun runtime crashes (bus error); see
+        # ARCHITECTURE.md "cline limitation" for the workaround status.
+        "cline": "npm install -g cline",
         "aider": "pip install --break-system-packages aider-chat",
     }
     for cli in provider_clis:
@@ -34,6 +38,31 @@ def _provider_cli_install_lines(provider_clis: list[str]) -> list[str]:
         if cmd:
             lines.append(f"echo '[bootstrap] installing provider CLI: {cli}'")
             lines.append(cmd)
+            # npm's final symlink step is unreliable on the overlay; re-link explicitly.
+            if cli in ("cline", "claude"):
+                lines.append(
+                    f"ln -sf /root/.npm-global/lib/node_modules/"
+                    f"{'cline' if cli == 'cline' else '@anthropic-ai/claude-code'}/bin/"
+                    f"{'cline' if cli == 'cline' else 'claude.exe'} "
+                    f"/root/.npm-global/bin/{cli} 2>/dev/null || true"
+                )
+            # On arm64 microsandbox VMs cline's Bun binary crashes (bus error).
+            # Install the node-based @cline/core shim as the real `cline` so
+            # loki --provider cline works without Bun. The shim is copied into
+            # the VM by the sandbox runner as a rootfs patch.
+            if cli == "cline":
+                lines += [
+                    "if [ -f /opt/cline-shim/cline-node-shim.cjs ]; then",
+                    "  mkdir -p /opt/cline-shim",
+                    "  cat > /usr/local/bin/cline <<'SHIMEOF'",
+                    "#!/usr/bin/env bash",
+                    'export CLINE_CWD="${CLINE_CWD:-$PWD}"',
+                    "exec node /opt/cline-shim/cline-node-shim.cjs \"$@\"",
+                    "SHIMEOF",
+                    "  chmod +x /usr/local/bin/cline",
+                    "  echo '[bootstrap] cline node-shim installed at /usr/local/bin/cline'",
+                    "fi",
+                ]
     return lines
 
 
@@ -54,30 +83,69 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         "export PATH=\"$HOME/.bun/bin:$PATH\"",
         "",
         "echo '[bootstrap] apt-get update + install'",
-        "apt-get update -qq",
+        # microsandbox's CoW overlay intermittently fails apt's
+        # partial->archive rename ('rename failed, No such file or directory').
+        # Redirect the apt cache to a tmpfs-backed dir (/tmp) so downloads and
+        # renames never touch the overlay, then clean any stale state.
+        "mkdir -p /tmp/apt-cache/archives/partial",
+        "cat >/etc/apt/apt.conf.d/99-tmpfs-cache <<'EOF'",
+        "Dir::Cache::Archives \"/tmp/apt-cache/archives\";",
+        "EOF",
+        "rm -rf /tmp/apt-cache/archives/* /var/cache/apt/archives/*.deb 2>/dev/null || true",
+        "apt-get clean",
+        # NOTE: do NOT use -qq here — it masks apt/dpkg progress and interacted
+        # badly with the overlay, leaving the dpkg lock held on partial runs.
+        "apt-get update",
     ]
 
-    # apt packages
+    # apt packages — cache is now on tmpfs, so install is overlay-safe.
+    # Retry once with --fix-missing in case of a transient fetch failure.
     if apt_pkgs:
         quoted = " ".join(_quote(p) for p in apt_pkgs)
-        lines.append(f"apt-get install -y -qq {quoted}")
+        lines.append(f"apt-get install -y {quoted} || apt-get install -y --fix-missing {quoted}")
 
-    # node via NodeSource
+    # node + npm: bootstrap via the debian nodejs package (fast, reliable) +
+    # a standalone npm tarball + the `n` version manager to upgrade to the
+    # requested version. Downloading the full node tarball directly from
+    # nodejs.org is unreliable inside microsandbox VMs (large-file timeouts);
+    # `n` retries and fetches more robustly.
+    nver = init.node_version
     lines += [
         "",
-        f"echo '[bootstrap] node {init.node_version} via NodeSource'",
-        f"curl -fsSL https://deb.nodesource.com/setup_{init.node_version}.x | bash -",
-        "apt-get install -y -qq nodejs",
+        f"echo '[bootstrap] node via debian nodejs + n -> {nver}'",
+        # nodejs deb (gives node18 quickly); npm comes from a small tarball.
+        "apt-get install -y nodejs",
+        "mkdir -p /opt/node/lib/node_modules",
+        "curl -fsSL https://registry.npmjs.org/npm/-/npm-10.9.0.tgz -o /tmp/npm.tgz",
+        "tar -xzf /tmp/npm.tgz -C /opt/node/lib/node_modules",
+        "mv /opt/node/lib/node_modules/package /opt/node/lib/node_modules/npm",
+        "rm -f /tmp/npm.tgz",
+        'printf \'#!/bin/sh\\nexec /usr/bin/node /opt/node/lib/node_modules/npm/bin/npm-cli.js "$@"\\n\' > /usr/local/bin/npm',
+        "chmod +x /usr/local/bin/npm",
+        "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"",
+        "npm config set prefix /root/.npm-global",
+        "mkdir -p /root/.npm-global/bin",
+        # npm-global/bin must be on PATH so `n` (installed there) is callable.
+        "export PATH=\"/root/.npm-global/bin:/usr/local/bin:/usr/bin:$PATH\"",
+        # upgrade node to the requested version via `n` (robust downloader).
+        "npm install -g n",
+        f"export N_PREFIX=/opt/node{nver}",
+        f"n install {nver}",
+        f"ln -sf /opt/node{nver}/bin/node /usr/local/bin/node",
+        f"ln -sf /opt/node{nver}/bin/npm /usr/local/bin/npm",
+        f"ln -sf /opt/node{nver}/bin/npx /usr/local/bin/npx",
+        "node -v && npm -v",
     ]
 
-    # bun
+    # bun — optional; never abort the whole bootstrap if it fails (loki/cline
+    # don't require it; only some provider tooling might). unzip must be present.
     if init.bun:
         lines += [
             "",
-            "echo '[bootstrap] bun'",
-            "curl -fsSL https://bun.sh/install | bash",
+            "echo '[bootstrap] bun (best-effort)'",
+            "curl -fsSL https://bun.sh/install | bash || echo '[bootstrap] bun install skipped'",
             "grep -q 'HOME/.bun/bin' \"$HOME/.bashrc\" || "
-            "echo 'export PATH=\"$HOME/.bun/bin:$PATH\"' >> \"$HOME/.bashrc\"",
+            "echo 'export PATH=\"$HOME/.bun/bin:$PATH\"' >> \"$HOME/.bashrc\" || true",
         ]
 
     # python pip hint (python3 may already be installed via apt above)
@@ -100,6 +168,29 @@ def _render_bootstrap(m: PlatformManifest) -> str:
         lines.append("")
         lines.append("echo '[bootstrap] loki provider CLIs'")
         lines.extend(prov_lines)
+
+    # unprivileged user: claude-code/cline refuse --dangerously-skip-permissions
+    # under root. Create a 'loki' user and make npm-global tools reachable to it.
+    lines += [
+        "",
+        "echo '[bootstrap] unprivileged user'",
+        "id loki >/dev/null 2>&1 || useradd -m -s /bin/bash loki",
+        # expose npm-global tools to all users via a shared /opt prefix
+        "mkdir -p /opt/npm-global",
+        "cp -a /root/.npm-global/lib /opt/npm-global/lib 2>/dev/null || true",
+        "cp -a /root/.npm-global/bin /opt/npm-global/bin 2>/dev/null || true",
+        "chmod -R a+rX /opt/npm-global",
+        # re-link common CLIs so non-root users can call them
+        "for b in loki cline claude; do",
+        "  [ -e /opt/npm-global/bin/$b ] || ln -sf /opt/npm-global/lib/node_modules/*/bin/$b /opt/npm-global/bin/$b 2>/dev/null || true",
+        "done",
+        # ensure the loki user's login shell can find all installed tools
+        "LOKI_BASHRC=/home/loki/.bashrc",
+        "grep -q 'npm-global/bin' \"$LOKI_BASHRC\" 2>/dev/null || "
+        "printf 'export PATH=\"/opt/npm-global/bin:/opt/node%s/bin:$PATH\"\\n' >> \"$LOKI_BASHRC\""
+        % m.sandbox.init.packages.node_version,
+        "chown -R loki:loki /workspace 2>/dev/null || true",
+    ]
 
     # user-supplied tail
     if init.extra_shell.strip():

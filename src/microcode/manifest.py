@@ -89,6 +89,10 @@ class SkillRegistry(BaseModel):
 class SkillsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    enabled: bool = Field(
+        default=True,
+        description="skip the entire skills provisioning phase when false",
+    )
     registry: SkillRegistry = Field(default_factory=SkillRegistry)
     install: list[SkillInstall] = Field(default_factory=list)
     translate: SkillTranslate = Field(default_factory=SkillTranslate)
@@ -267,7 +271,8 @@ class InitPackages(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     apt: list[str] = Field(
-        default_factory=lambda: ["curl", "git", "ca-certificates", "python3", "python3-pip"]
+        # unzip is required by the bun installer; xz by some npm tarballs.
+        default_factory=lambda: ["curl", "git", "ca-certificates", "python3", "python3-pip", "unzip"]
     )
     npm_global: list[str] = Field(
         default_factory=lambda: ["loki-mode", "@skillkit/cli"]

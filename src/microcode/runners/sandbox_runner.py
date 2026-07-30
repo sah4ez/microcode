@@ -43,10 +43,22 @@ class SandboxRunner(ShellRunner):
 
     def _resolve_placeholders(self, argv: list[str]) -> list[str]:
         host_bs = str(self.artifacts_dir / config.BOOTSTRAP_NAME)
+        host_shim = str(self.artifacts_dir / "cline-node-shim.cjs")
         out: list[str] = []
         for tok in argv:
             # the generator emits "--copy-file bootstrap.sh:/root/bootstrap.sh"
             if tok.startswith(f"{config.BOOTSTRAP_NAME}:"):
                 tok = f"{host_bs}:{tok.split(':', 1)[1]}"
             out.append(tok)
+        # inject the cline node-shim as an extra rootfs patch on the create cmd
+        # (used by bootstrap on arm64 VMs where cline's Bun binary crashes).
+        if (
+            argv[:2] == ["msb", "create"]
+            and "--copy-file" in out
+            and Path(host_shim).exists()
+            and "cline-node-shim.cjs" not in " ".join(out)
+        ):
+            i = out.index("--copy-file")
+            # insert a second --copy-file pair right after the bootstrap one
+            out[i + 2 : i + 2] = ["--copy-file", f"{host_shim}:/opt/cline-shim/cline-node-shim.cjs"]
         return out

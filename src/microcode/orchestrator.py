@@ -31,6 +31,13 @@ def write_artifacts(plan: Plan, artifacts_dir: Path) -> None:
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     for art in plan.artifacts:
         (artifacts_dir / art.name).write_text(art.content, encoding="utf-8")
+    # also stage the cline node-shim asset (used by bootstrap on arm64 VMs
+    # where cline's Bun binary crashes) so the sandbox runner can copy-file it.
+    import shutil
+    from microcode import config as _cfg
+    shim_src = Path(_cfg.__file__).parent / "assets" / "cline-node-shim.cjs"
+    if shim_src.exists():
+        shutil.copy2(shim_src, artifacts_dir / "cline-node-shim.cjs")
 
 
 def doctor() -> list[str]:
