@@ -156,6 +156,16 @@ def build(
         # The plan already contains the full sequence when snapshot.enabled:
         # msb create + bootstrap + msb stop + msb snapshot create. We just run
         # it (no skillkit, no loki — that's `apply`'s job).
+        if not dry_run:
+            # remove a stale same-name sandbox so msb create doesn't fail with
+            # "already exists" (msb create has no --replace, unlike msb run).
+            from microcode.runners import SkillkitRunner
+            rm = ["msb", "rm", "-f", m.sandbox.name]
+            logging_utils.step(f"Removing stale sandbox '{m.sandbox.name}' (if any)")
+            try:
+                SkillkitRunner(cwd=str(root)).run([rm])
+            except MicrocodeError:
+                pass  # tolerate "not found"
         logging_utils.step("Creating sandbox + bootstrapping + snapshot")
         SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
             plan.sandbox_commands, dry_run=dry_run

@@ -52,6 +52,7 @@ class SandboxRunner(ShellRunner):
         """Create host-side dirs for writable bind mounts (host:dest[:ro])."""
         from pathlib import Path
 
+        cwd = Path(self.cwd) if self.cwd else Path.cwd()
         for argv in commands:
             if argv[:2] not in (("msb", "create"), ("msb", "run")):
                 continue
@@ -59,15 +60,15 @@ class SandboxRunner(ShellRunner):
                 if tok != "-v" or i + 1 >= len(argv):
                     continue
                 spec = argv[i + 1]
-                # skip named volumes (name only, no '/'), and readonly mounts
+                # skip named volumes (bare name, no '/'), and readonly mounts
                 if spec.endswith(":ro") or ":" not in spec:
                     continue
                 host = spec.split(":", 1)[0]
-                # only host bind paths (relative or absolute existing files)
-                if host.startswith("/") and not Path(host).exists():
-                    continue
+                # resolve relative to cwd (same as _resolve_placeholders)
                 p = Path(host)
-                if not p.is_absolute() and not p.exists():
+                if not p.is_absolute():
+                    p = (cwd / host)
+                if not p.exists():
                     try:
                         p.mkdir(parents=True, exist_ok=True)
                     except OSError as e:  # pragma: no cover - best effort
@@ -76,12 +77,28 @@ class SandboxRunner(ShellRunner):
     def _resolve_placeholders(self, argv: list[str]) -> list[str]:
         host_bs = str(self.artifacts_dir / config.BOOTSTRAP_NAME)
         host_shim = str(self.artifacts_dir / "cline-node-shim.cjs")
+        cwd = Path(self.cwd) if self.cwd else Path.cwd()
         out: list[str] = []
         for tok in argv:
             # the generator emits "--copy-file bootstrap.sh:/root/bootstrap.sh"
             if tok.startswith(f"{config.BOOTSTRAP_NAME}:"):
                 tok = f"{host_bs}:{tok.split(':', 1)[1]}"
+            # resolve relative host bind-mount paths to absolute (msb resolves
+            # -v paths relative to its own cwd, which may differ from ours).
+            # spec form: host:dest[:ro] ; only touch the host (first) segment.
+            if tok == "-v" or tok == "--volume":
+                pass  # handled below when we hit the value
             out.append(tok)
+        # second pass: absolutize the value following each -v/--volume
+        for i, tok in enumerate(out):
+            if tok in ("-v", "--volume") and i + 1 < len(out):
+                spec = out[i + 1]
+                parts = spec.split(":")
+                host = parts[0]
+                # skip named volumes (bare name, no '/') and already-absolute
+                if "/" in host and not host.startswith("/"):
+                    parts[0] = str((cwd / host).resolve())
+                    out[i + 1] = ":".join(parts)
         # inject the cline node-shim as an extra rootfs patch on the create cmd
         # (used by bootstrap on arm64 VMs where cline's Bun binary crashes).
         if (
