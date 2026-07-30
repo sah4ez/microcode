@@ -22,7 +22,7 @@ Important rules enforced here:
 
 from __future__ import annotations
 
-from microcode.manifest import NET_GROUPS, NetworkConfig, NetRule
+from microcode.manifest import NET_GROUPS, DnsConfig, NetworkConfig, NetRule
 
 
 def rule_token(rule: NetRule) -> str:
@@ -79,6 +79,8 @@ def network_argv(net: NetworkConfig) -> list[str]:
         # convenience deny rules still apply on top of the profile
         for tok in deny_domain_tokens + deny_suffix_tokens:
             argv += ["--net-rule", tok]
+        # DNS resolvers apply in all modes (msb --dns-nameserver etc.).
+        argv += dns_argv(net.dns)
         return argv
 
     # allowlist / denylist: deny-default knob (conflicts with --net)
@@ -98,4 +100,20 @@ def network_argv(net: NetworkConfig) -> list[str]:
 
     for tok in tokens:
         argv += ["--net-rule", tok]
+
+    # DNS resolvers (mode-independent; msb --dns-nameserver etc.). Use when the
+    # host resolvers intermittently fail (e.g. bun.sh not resolving).
+    argv += dns_argv(net.dns)
+    return argv
+
+
+def dns_argv(dns: DnsConfig) -> list[str]:
+    """Render DNS flags: ``--dns-nameserver`` (repeatable), timeout, rebind."""
+    argv: list[str] = []
+    for ns in dns.nameservers:
+        argv += ["--dns-nameserver", ns]
+    if dns.query_timeout_ms is not None:
+        argv += ["--dns-query-timeout-ms", str(dns.query_timeout_ms)]
+    if dns.no_rebind_protection:
+        argv += ["--no-dns-rebind-protection"]
     return argv

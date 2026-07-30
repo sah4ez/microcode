@@ -119,6 +119,11 @@ sandbox:
       - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
       # node tarball (bootstrap качает node)
       - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+    # Альтернативные DNS: хост-резолверы иногда не резолвят bun.sh и др.
+    # Пиним надёжные upstream-резолверы (микросандбокс форвардит туда DNS).
+    dns:
+      nameservers: [1.1.1.1, 8.8.8.8]
+      query_timeout_ms: 3000
 
   init:
     packages:

@@ -145,6 +145,39 @@ def test_denylist_mode_keeps_default_allow_plus_denies():
     assert argv[argv.index("--net-default-egress") + 1] == "allow"
     assert "deny@10.0.0.0/8" in argv
     assert "deny@malicious.example.com" in argv
+
+
+# ---- network_argv: DNS ---------------------------------------------------- #
+
+def test_dns_nameservers_emitted_in_all_modes():
+    for mode, extra in [
+        ("profile", {"profile": ["public"]}),
+        ("allowlist", {"allow": [{"action": "allow", "target": "api.z.ai"}]}),
+        ("denylist", {"deny": [{"action": "deny", "target": "x.com"}]}),
+    ]:
+        net = NetworkConfig(mode=mode, **extra, dns={"nameservers": ["1.1.1.1", "8.8.8.8"]})
+        argv = network_argv(net)
+        # one --dns-nameserver pair per resolver
+        ns = [argv[i + 1] for i, t in enumerate(argv) if t == "--dns-nameserver"]
+        assert ns == ["1.1.1.1", "8.8.8.8"], f"mode={mode} missing DNS flags"
+
+
+def test_dns_query_timeout_and_rebind():
+    net = NetworkConfig(
+        mode="profile", profile=["public"],
+        dns={"query_timeout_ms": 3000, "no_rebind_protection": True},
+    )
+    argv = network_argv(net)
+    assert "--dns-query-timeout-ms" in argv
+    assert argv[argv.index("--dns-query-timeout-ms") + 1] == "3000"
+    assert "--no-dns-rebind-protection" in argv
+
+
+def test_dns_no_config_emits_no_flags():
+    net = NetworkConfig(mode="profile", profile=["public"])
+    argv = network_argv(net)
+    assert not any(t.startswith("--dns") for t in argv)
+    assert "--no-dns-rebind-protection" not in argv
     # denylist does NOT inject allow@dns (default already allows public)
     assert "allow@dns" not in argv
 

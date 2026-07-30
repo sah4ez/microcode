@@ -276,6 +276,35 @@ class NetRule(BaseModel):
         return v
 
 
+class DnsConfig(BaseModel):
+    """Custom DNS resolvers for the sandbox (maps to msb ``--dns-nameserver``).
+
+    Useful when the host's default resolvers intermittently fail to resolve
+    certain domains (e.g. ``bun.sh``). Setting ``nameservers`` overrides the
+    host ``/etc/resolv.conf`` upstream resolvers used by microsandbox's DNS
+    gateway.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nameservers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "upstream DNS resolvers (repeatable); each is an IP or IP:PORT, "
+            "e.g. ['1.1.1.1', '8.8.8.8']. Emits one --dns-nameserver per entry."
+        ),
+    )
+    query_timeout_ms: int | None = Field(
+        default=None,
+        ge=1,
+        description="per-DNS-query timeout in ms (msb default 5000)",
+    )
+    no_rebind_protection: bool = Field(
+        default=False,
+        description="allow DNS responses pointing to private/internal IPs",
+    )
+
+
 class NetworkConfig(BaseModel):
     """Sandbox network policy.
 
@@ -311,6 +340,10 @@ class NetworkConfig(BaseModel):
     deny_domain_suffixes: list[str] = Field(
         default_factory=list,
         description="domain suffixes to deny, e.g. 'example.com' -> *.example.com",
+    )
+    dns: DnsConfig = Field(
+        default_factory=DnsConfig,
+        description="custom DNS resolvers (overrides host resolv.conf upstream)",
     )
 
     @model_validator(mode="after")

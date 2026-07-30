@@ -179,6 +179,20 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "domain suffixes to deny, e.g. 'example.com' -> *.example.com"
+            },
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "custom DNS resolvers (overrides host resolv.conf upstream)",
+              "properties": {
+                "nameservers": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "upstream resolvers, e.g. ['1.1.1.1', '8.8.8.8'] (--dns-nameserver)"
+                },
+                "query_timeout_ms": { "type": "integer", "minimum": 1 },
+                "no_rebind_protection": { "type": "boolean" }
+              }
             }
           }
         },

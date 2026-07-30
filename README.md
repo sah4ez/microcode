@@ -171,6 +171,29 @@ sandbox:
 See [`ARCHITECTURE.md`](ARCHITECTURE.md#network-policies-allow--deny-lists) for
 the full rule grammar and all three modes.
 
+### Custom DNS resolvers
+
+When the host's default resolvers intermittently fail to resolve a domain
+(e.g. `bun.sh` during bootstrap), pin reliable upstream resolvers via
+`sandbox.network.dns`:
+
+```yaml
+sandbox:
+  network:
+    mode: allowlist
+    default_egress: deny
+    allow: [...]
+    dns:
+      nameservers: [1.1.1.1, 8.8.8.8]   # --dns-nameserver (repeatable)
+      query_timeout_ms: 3000             # --dns-query-timeout-ms (optional)
+      no_rebind_protection: false        # allow private-IP DNS answers (optional)
+```
+
+Each nameserver is an `IP` or `IP:PORT`. This overrides the host
+`/etc/resolv.conf` upstream used by microsandbox's DNS gateway (the gateway
+still intercepts DNS; this sets where it forwards). Works in all three
+network modes.
+
 ### Secrets
 
 Secrets are referenced **by host env-var name only**. microcode emits
