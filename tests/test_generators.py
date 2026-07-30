@@ -282,6 +282,34 @@ def test_sandbox_snapshot_adds_snapshot_command():
     assert res.commands[2][:4] == ["msb", "snapshot", "create", "s1"]
 
 
+def test_sandbox_from_snapshot_boots_via_msb_run_and_skips_bootstrap():
+    m = _m(sandbox={
+        "name": "sb1", "cpus": 4,
+        "init": {"snapshot": {"from_snapshot": "mcd-base"}},
+    })
+    res = generate_sandbox(m)
+    # exactly one command, and it is msb run --from-snapshot (not create)
+    assert len(res.commands) == 1
+    run = res.commands[0]
+    assert run[:2] == ["msb", "run"]
+    assert "--from-snapshot" in run
+    assert run[run.index("--from-snapshot") + 1] == "mcd-base"
+    assert "--name" in run and "sb1" in run
+    assert "--detach" in run
+    # resources are still wired
+    assert "--cpus" in run and "4" in run
+    # no bootstrap injection when booting from a snapshot
+    assert "--copy-file" not in run
+    assert not any("bootstrap.sh" in " ".join(c) for c in res.commands)
+    assert any("skipped" in n for n in res.notes)
+
+
+def test_sandbox_from_snapshot_rejects_enabled_combo():
+    import pytest
+    with pytest.raises(Exception):
+        _m(sandbox={"init": {"snapshot": {"enabled": True, "from_snapshot": "x"}}})
+
+
 def test_sandbox_secret_flag_format():
     m = _m(sandbox={"secrets": [
         {"env": "ANTHROPIC_API_KEY", "allow_hosts": ["api.anthropic.com", "x.com"]}

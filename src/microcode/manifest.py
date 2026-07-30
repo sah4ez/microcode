@@ -377,10 +377,43 @@ class InitPackages(BaseModel):
 
 
 class SnapshotConfig(BaseModel):
+    """Snapshot caching for the prepared environment.
+
+    Two mutually-exclusive modes:
+
+    * ``enabled: true`` — capture a snapshot after bootstrap (used by
+      ``microcode build``). Subsequent ``apply`` calls reuse it if
+      ``from_snapshot`` is also set.
+    * ``from_snapshot: <name>`` — boot from an existing snapshot (``msb run
+      --from-snapshot``), skipping the bootstrap entirely. The snapshot must
+      already exist (created via ``microcode build`` or loaded via
+      ``microcode snapshot load``).
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = False
-    name: str = "loki-prepared"
+    enabled: bool = Field(
+        default=False,
+        description="capture a snapshot after bootstrap (microcode build)",
+    )
+    name: str = Field(default="mcd-base", description="snapshot name")
+    from_snapshot: str | None = Field(
+        default=None,
+        description=(
+            "name/path of an existing snapshot to boot from (msb run "
+            "--from-snapshot); skips bootstrap. Mutually exclusive with enabled."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_exclusive(self) -> "SnapshotConfig":
+        if self.enabled and self.from_snapshot:
+            raise ValueError(
+                "snapshot.enabled and snapshot.from_snapshot are mutually "
+                "exclusive: use 'enabled' to create (microcode build) or "
+                "'from_snapshot' to reuse (microcode apply)"
+            )
+        return self
 
 
 class InitConfig(BaseModel):

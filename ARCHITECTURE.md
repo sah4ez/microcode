@@ -85,6 +85,17 @@ flows three ways: into `loki-config.yaml` as `model`, into `loki.env` as
 reads it, overriding its `glm-4.6` default). `config_overrides.model` wins over
 `loki.model`; omitting `model` keeps the provider default.
 
+### Cached base image via snapshots (`snapshot.from_snapshot`)
+
+`bootstrap.sh` is the slow part of every `apply`. `microcode build` captures the
+prepared environment as a microsandbox snapshot once (`msb snapshot create ...
+--from <stopped-sandbox>`). Then `sandbox.init.snapshot.from_snapshot: <name>`
+makes `apply` boot via `msb run --from-snapshot <name> --detach` instead of
+`msb create` + init — the bootstrap phase is skipped entirely (tools already live
+in the snapshot's filesystem). `from_snapshot` and `enabled` (capture mode) are
+mutually exclusive. Snapshots are portable: `microcode snapshot save/load` wrap
+`msb snapshot save/load` (with the OCI cache bundled, for offline boot).
+
 ### Optional: skillkit inside the VM (`skills.in_vm: true`)
 
 By default skillkit runs on the **host** (step 4). Set `skills.in_vm: true` to

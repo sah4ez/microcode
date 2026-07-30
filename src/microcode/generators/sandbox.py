@@ -90,12 +90,75 @@ def _snapshot_argv(m: PlatformManifest) -> list[str]:
     ]
 
 
+def _stop_argv(m: PlatformManifest) -> list[str]:
+    """Stop a running sandbox so a snapshot can be captured from it."""
+    return ["msb", "stop", m.sandbox.name]
+
+
+def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
+    """Boot a fresh sandbox from an existing snapshot via ``msb run``.
+
+    Mirrors the resources/network/secrets/volumes/mounts/ports of ``_create_argv``
+    but starts from the snapshot's filesystem (tools already installed) instead
+    of the base image. ``--from-snapshot`` is mutually exclusive with the image
+    positional and with ``--copy-file`` bootstrap, so neither is emitted.
+    """
+    s = m.sandbox
+    argv = ["msb", "run", "--from-snapshot", s.init.snapshot.from_snapshot]
+    argv += ["--name", s.name, "--detach"]
+
+    argv += ["--cpus", str(s.cpus)]
+    argv += ["--memory", f"{s.memory}M"]
+    if s.max_cpus is not None:
+        argv += ["--max-cpus", str(s.max_cpus)]
+    if s.max_memory is not None:
+        argv += ["--max-memory", f"{s.max_memory}M"]
+
+    argv += network_argv(s.network)
+
+    for sec in s.secrets:
+        argv += ["--secret", f"{sec.env}@{','.join(sec.allow_hosts)}"]
+
+    for v in s.volumes:
+        argv += ["-v", f"{v.name}:{v.dest}"]
+    if m.loki.memory.storage.enabled:
+        st = m.loki.memory.storage
+        already = any(v.name == st.volume for v in s.volumes)
+        if not already:
+            argv += ["-v", f"{st.volume}:{st.dest}"]
+    for mt in s.mounts:
+        spec = f"{mt.host}:{mt.dest}"
+        if mt.readonly:
+            spec += ":ro"
+        argv += ["-v", spec]
+
+    for p in s.ports:
+        argv += ["-p", p]
+
+    from microcode.utils import expand_env
+    for k, v in s.env.items():
+        argv += ["-e", f"{k}={expand_env(v)}"]
+
+    argv += ["--user", s.user]
+    return argv
+
+
 def generate_sandbox(
     m: PlatformManifest, bootstrap_guest: str = "/root/bootstrap.sh"
 ) -> GenerationResult:
     s = m.sandbox
-    commands: list[list[str]] = [_create_argv(m, bootstrap_guest)]
     notes: list[str] = []
+
+    # Booting from an existing snapshot: tools already installed, skip bootstrap.
+    if s.init.snapshot.from_snapshot:
+        commands: list[list[str]] = [_from_snapshot_argv(m)]
+        notes.append(
+            f"booting from snapshot '{s.init.snapshot.from_snapshot}'; "
+            "bootstrap.sh skipped (tools already installed in the snapshot)"
+        )
+        return GenerationResult(commands=commands, notes=notes)
+
+    commands = [_create_argv(m, bootstrap_guest)]
 
     if s.init.snapshot.enabled:
         # snapshot path: run init, then snapshot. (When re-applying from an

@@ -208,9 +208,46 @@ contains a secret value.
 | `microcode validate [file]` | Validate the manifest (pydantic schema) |
 | `microcode plan [file] --prd ...` | Print the ordered plan + generated `bootstrap.sh` |
 | `microcode apply [file] --prd ...` | Provision skills, VM, init, and start loki |
+| `microcode build [file]` | Build a cached base-image snapshot (bootstrap once) |
+| `microcode snapshot save/load` | Export/import a snapshot for portability |
 | `microcode destroy [file]` | Stop/remove the VM and clean generated state |
 | `microcode show [file]` | Dump the resolved manifest |
 | `microcode doctor` | Check `msb` and `skillkit` are on PATH |
+
+### Cached base image (snapshots)
+
+`bootstrap.sh` installs node/bun/loki/cline/skillkit every `apply` (~20-30 min on
+arm64). Build a snapshot **once** and boot from it on every subsequent `apply`,
+skipping bootstrap entirely:
+
+```bash
+# 1. build the snapshot (one time): boots debian, runs bootstrap, captures snapshot
+microcode build examples/cached-base.yaml
+#    -> snapshot 'mcd-base'
+
+# 2. apply reuses it (~seconds, no bootstrap):
+microcode apply examples/cached-base.yaml
+#    -> msb run --from-snapshot mcd-base
+```
+
+The manifest switches modes via `sandbox.init.snapshot`:
+```yaml
+sandbox:
+  init:
+    snapshot:
+      # enabled: true        # capture after bootstrap (build) — OR —
+      from_snapshot: mcd-base # boot from existing snapshot (apply), skips bootstrap
+```
+
+`enabled` and `from_snapshot` are mutually exclusive. Transfer a snapshot between
+machines:
+```bash
+microcode snapshot save mcd-base mcd-base.tar.zst   # export (with OCI cache)
+scp mcd-base.tar.zst host2:
+microcode snapshot load mcd-base.tar.zst             # import on host2
+```
+
+See [`examples/cached-base.yaml`](examples/cached-base.yaml).
 
 ## Development
 

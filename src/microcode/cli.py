@@ -14,7 +14,7 @@ from microcode.errors import MicrocodeError
 from microcode.manifest import find_manifest, load_manifest
 from microcode.orchestrator import apply as apply_plan
 from microcode.orchestrator import destroy as destroy_plan
-from microcode.orchestrator import doctor, dump_plan
+from microcode.orchestrator import doctor, dump_plan, write_artifacts
 from microcode.planner import build_plan
 
 app = typer.Typer(
@@ -23,6 +23,14 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+snapshot_app = typer.Typer(
+    name="snapshot",
+    help="Manage cached base-image snapshots (save/load for portability).",
+    no_args_is_help=True,
+    add_completion=False,
+)
+app.add_typer(snapshot_app, name="snapshot")
 
 
 def _resolve_manifest(file: str | None) -> Path:
@@ -106,6 +114,113 @@ def apply(
     # persist the applied plan for reproducibility (skip in dry-run: no side effects)
     if not dry_run:
         dump_plan(p, config.artifact_path(config.PLAN_NAME, root, m.project.state_dir))
+
+
+@app.command()
+def build(
+    file: str = typer.Argument(None),
+    dry_run: bool = typer.Option(False, "--dry-run", help="print commands, execute nothing"),
+    skip_doctor: bool = typer.Option(False, "--skip-doctor", help="skip dependency check"),
+):
+    """Build a cached base-image snapshot (bootstrap once, reuse forever).
+
+    Boots the stock debian VM, runs bootstrap.sh (node/bun/loki/cline/skillkit),
+    stops the VM, and captures a snapshot named by ``sandbox.init.snapshot.name``.
+    Subsequent ``apply`` calls with ``snapshot.from_snapshot`` boot from it,
+    skipping bootstrap entirely (~seconds vs ~30 min on arm64).
+    """
+    from microcode.runners import SandboxRunner, SkillkitRunner, which
+
+    path, m = _load(file)
+    root = path.parent
+    if not m.sandbox.init.snapshot.name:
+        logging_utils.error("sandbox.init.snapshot.name is empty")
+        raise typer.Exit(code=1)
+    try:
+        if not skip_doctor and not dry_run:
+            logging_utils.step("Checking dependencies")
+            doctor(m)
+
+        logging_utils.step("Building plan")
+        plan = build_plan(m)
+
+        logging_utils.step("Writing artifacts")
+        artifacts_dir = config.artifacts_dir(root, m.project.state_dir)
+        if dry_run:
+            for art in plan.artifacts:
+                logging_utils.info(f"  [dim](would write)[/dim] {artifacts_dir / art.name}")
+        else:
+            write_artifacts(plan, artifacts_dir)
+            logging_utils.ok(f"artifacts written to {artifacts_dir}")
+
+        # Only the sandbox create + bootstrap phases (no skillkit, no loki).
+        logging_utils.step("Creating sandbox + bootstrapping")
+        SandboxRunner(artifacts_dir=artifacts_dir, cwd=str(root)).run(
+            plan.sandbox_commands, dry_run=dry_run
+        )
+
+        # Snapshot capture: stop the VM, then snapshot from it.
+        snap_name = m.sandbox.init.snapshot.name
+        stop_cmd = ["msb", "stop", m.sandbox.name]
+        snap_cmd = ["msb", "snapshot", "create", snap_name, "--from", m.sandbox.name, "--force"]
+        runner = SkillkitRunner(cwd=str(root))  # reuses shell + dry-run logic
+        logging_utils.step("Stopping sandbox for snapshot capture")
+        runner.run([stop_cmd], dry_run=dry_run)
+        logging_utils.step(f"Capturing snapshot '{snap_name}'")
+        runner.run([snap_cmd], dry_run=dry_run)
+
+        if dry_run:
+            logging_utils.warn("dry-run: nothing was executed")
+        else:
+            logging_utils.ok(
+                f"snapshot '{snap_name}' built. Set "
+                f"snapshot.from_snapshot: {snap_name} and run `microcode apply` to reuse it."
+            )
+    except MicrocodeError as e:
+        logging_utils.error(str(e))
+        raise typer.Exit(code=1)
+
+
+@snapshot_app.command("save")
+def snapshot_save(
+    name: str = typer.Argument(..., help="snapshot name/path"),
+    out: str = typer.Argument(..., help="output archive path (tar.zst)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="print command, execute nothing"),
+):
+    """Export a snapshot to a portable archive (with OCI cache for offline boot)."""
+    from microcode.runners import SkillkitRunner
+
+    cmd = ["msb", "snapshot", "save", name, out, "--with-image"]
+    logging_utils.cmd(" ".join(cmd))
+    if not dry_run:
+        try:
+            SkillkitRunner().run([cmd])
+            logging_utils.ok(f"saved snapshot '{name}' -> {out}")
+        except MicrocodeError as e:
+            logging_utils.error(str(e))
+            raise typer.Exit(code=1)
+
+
+@snapshot_app.command("load")
+def snapshot_load(
+    archive: str = typer.Argument(..., help="archive path (tar.zst)"),
+    dest: str = typer.Argument(None, help="optional destination dir"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="print command, execute nothing"),
+):
+    """Import a snapshot archive on another machine."""
+    from microcode.runners import SkillkitRunner
+
+    cmd = ["msb", "snapshot", "load", archive]
+    if dest:
+        cmd.append(dest)
+    logging_utils.cmd(" ".join(cmd))
+    if not dry_run:
+        try:
+            SkillkitRunner().run([cmd])
+            logging_utils.ok(f"loaded snapshot from {archive}")
+        except MicrocodeError as e:
+            logging_utils.error(str(e))
+            raise typer.Exit(code=1)
 
 
 @app.command()

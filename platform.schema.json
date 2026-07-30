@@ -214,9 +214,11 @@
             "snapshot": {
               "type": "object",
               "additionalProperties": false,
+              "description": "snapshot caching: enabled (build) or from_snapshot (reuse); mutually exclusive",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "name": { "type": "string" }
+                "enabled": { "type": "boolean", "description": "capture after bootstrap (microcode build)" },
+                "name": { "type": "string" },
+                "from_snapshot": { "type": "string", "description": "boot from existing snapshot (skip bootstrap); msb run --from-snapshot" }
               }
             }
           }

@@ -1,0 +1,68 @@
+# Example: cached base image via microsandbox snapshots.
+#
+# bootstrap.sh installs node/bun/loki/cline/skillkit every apply (~20-30 min on
+# arm64). This manifest shows how to build a snapshot ONCE and boot from it on
+# every subsequent apply, skipping bootstrap entirely.
+#
+# Workflow:
+#   # 1. build the snapshot (one time): create + bootstrap + stop + snapshot
+#   microcode build examples/cached-base.yaml
+#   #    -> snapshot 'mcd-base'
+#
+#   # 2. apply reuses it (~seconds, no bootstrap):
+#   microcode apply examples/cached-base.yaml
+#   #    -> msb run --from-snapshot mcd-base --detach
+#
+#   # 3. (optional) transfer to another machine:
+#   microcode snapshot save mcd-base mcd-base.tar.zst
+#   microcode snapshot load mcd-base.tar.zst
+#
+# NOTE: to BUILD the snapshot, temporarily comment out `from_snapshot` and set
+# `enabled: true`, run `microcode build`, then switch back. Or keep two files:
+# one for build (enabled: true), one for apply (from_snapshot).
+
+version: 1
+
+project:
+  name: cached-base
+  workdir: /workspace
+
+skills:
+  agents: [cline]
+  install:
+    - source: obra/superpowers
+      skills: [test-driven-development, verification-before-completion]
+  translate: { target_agent: cline, output_dir: skills }
+
+loki:
+  provider: cline
+  model: glm-5.2
+  max_iterations: 15
+
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: cached-build
+  cpus: 2
+  memory: 2048
+  network:
+    mode: allowlist
+    default_egress: deny
+    allow:
+      - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
+      - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: github.com, proto: tcp, port: 443 }
+    dns:
+      nameservers: [1.1.1.1, 8.8.8.8]
+  init:
+    packages:
+      npm_global: [loki-mode, "@skillkit/cli"]
+    snapshot:
+      # --- APPLY mode (default): boot from the pre-built snapshot ---
+      from_snapshot: mcd-base
+      # --- BUILD mode: uncomment to capture, then run `microcode build` ---
+      # enabled: true
+      name: mcd-base
+  mounts:
+    - { host: ./src, dest: /workspace, readonly: false }
