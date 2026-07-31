@@ -80,6 +80,7 @@ skills:                       # → skillkit
 loki:                         # → loki-mode
   provider: claude
   model: claude-sonnet-4-5    # model id for the active provider (optional)
+  dashboard: true             # web UI at http://localhost:57374 (live RARV progress)
   max_budget_usd: 10.0
   quality_gates: { enabled: true }
 

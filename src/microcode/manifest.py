@@ -209,6 +209,14 @@ class LokiConfig(BaseModel):
             "reviewing the output of a stop_after_phase run."
         ),
     )
+    dashboard: bool = Field(
+        default=True,
+        description=(
+            "enable the loki web dashboard (port LOKI_DASHBOARD_PORT, default "
+            "57374) to watch RARV progress live in a browser. Published via "
+            "sandbox.ports. Set false to disable (--no-dashboard)."
+        ),
+    )
     quality_gates: QualityGates = Field(default_factory=QualityGates)
     memory: LokiMemory = Field(default_factory=LokiMemory)
     proofs: LokiProofs = Field(default_factory=LokiProofs)

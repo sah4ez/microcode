@@ -67,7 +67,9 @@ def build_plan(m: PlatformManifest, prd: str | None = None) -> Plan:
         f"&& export HOME=/home/loki && cd /workspace"
     )
     loki_inner = (
-        f"{prefix} && loki start --config {GUEST_CONFIG} --no-dashboard --simple"
+        f"{prefix} && loki start --config {GUEST_CONFIG}"
+        + (" --api" if m.loki.dashboard else " --no-dashboard")
+        + " --simple"
         + (f" {prd}" if prd else "")
     )
     loki_cmd = (

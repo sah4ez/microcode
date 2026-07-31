@@ -89,6 +89,10 @@
           "type": ["string", "null"],
           "description": "loki starts from this SDLC phase (skip earlier phases)"
         },
+        "dashboard": {
+          "type": "boolean",
+          "description": "enable loki web dashboard (port 57374) for live RARV progress"
+        },
         "quality_gates": {
           "type": "object",
           "additionalProperties": false,

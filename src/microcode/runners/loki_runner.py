@@ -31,7 +31,8 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
     )
     inner = (
         f"{prefix}&& loki start --config {config_guest} --provider {m.loki.provider}"
-        f" --no-dashboard --simple"
+        + (" --api" if m.loki.dashboard else " --no-dashboard")
+        + " --simple"
         + (f" {prd}" if prd else "")
     )
     argv = ["msb", "exec", m.sandbox.name, "--user", "loki"]

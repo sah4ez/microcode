@@ -49,3 +49,19 @@ def test_loki_start_runs_as_loki_user_with_provider_flag():
     assert "--provider cline" in joined
     assert "/workspace/cfg.yaml" in joined
     assert "prd.md" in joined
+
+
+def test_loki_dashboard_enabled_by_default():
+    m = _m(loki={"provider": "cline"})
+    argv = loki_start_argv(m, "/workspace/cfg.yaml", None)
+    joined = " ".join(argv)
+    assert "--api" in joined
+    assert "--no-dashboard" not in joined
+
+
+def test_loki_dashboard_disabled():
+    m = _m(loki={"provider": "cline", "dashboard": False})
+    argv = loki_start_argv(m, "/workspace/cfg.yaml", None)
+    joined = " ".join(argv)
+    assert "--no-dashboard" in joined
+    assert "--api" not in joined
