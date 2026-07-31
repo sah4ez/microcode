@@ -50,6 +50,9 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
     # mounted named volume (persists across VM destroy/recreate).
     if m.loki.memory.storage.enabled:
         argv += ["-e", f"LOKI_MEMORY_BASE_PATH={m.loki.memory.storage.dest}"]
+    # enable HUMAN_INPUT.md reading so 'microcode steer' directives are picked
+    # up on the next RARV iteration (off by default in loki).
+    argv += ["-e", "LOKI_PROMPT_INJECTION=1"]
     argv += ["--", "bash", "-lc", inner]
     return argv
 
