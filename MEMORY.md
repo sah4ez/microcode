@@ -21,19 +21,33 @@
 ## Текущее состояние (ДОКАЗАНО)
 
 - **Todo-приложение с UI построено через `provider cline` + GLM-5.2/z.ai** внутри
-  microcode VM. 20/20 тестов зелёные. CRUD + toggle done + delete, SQLite
-  персистентен, UI (vanilla JS) обслуживается сервером. Код в `test-todo/src/`.
+  microcode VM. CRUD + toggle done + delete + **priority** (срочные задачи —
+  оранжевые карточки), SQLite персистентен, UI (vanilla JS). Код в `test-todo/src/`.
+- **Steer доказан end-to-end**: `microcode steer` → loki добавил поле `priority`
+  (bool) во весь стек (models/repository/main/UI CSS+JS/тесты) + мигрировал на
+  FastAPI/Pydantic v2/uvicorn. Коммит `1d6d0c3` внутри VM.
 - **Полный pipeline работает end-to-end**: `microcode build` (snapshot) →
   `microcode apply` (from_snapshot + named volumes + msb cp seeding) → skillkit
   install+translate (obra/superpowers) → loki start --provider cline --api →
   RARV-цикл → готовое приложение. `msb cp` копирует результат в локальный репо.
 - **Loki dashboard доступен** на http://localhost:57374 (live RARV прогресс,
-  Lab tab для постановки задач).
-- **Todo-app доступен** на http://localhost:8000 (UI для управления задачами).
+  Lab tab для постановки задач). Нужен `--host 0.0.0.0` + fastapi/uvicorn.
+- **Todo-app доступен** на http://localhost:8000 (UI с оранжевыми карточками для priority).
 - **Тесты: 79/79 зелёные.**
 - 7 примеров валидны: minimal, allowlist, full-stack, skills-in-vm,
   cached-base, todo-api-cline, cline-multi-skills.
-- Всё запушено в `origin/master` (github.com:sah4ez/microcode.git).
+- Всё запушено в `origin/master` (github.com:sah4ez/microcode.git), последний
+  коммит `6115ee7`.
+
+## Steer — рабочий pattern (ДОКАЗАНО)
+
+`microcode steer` пишет директиву в `.loki/HUMAN_INPUT.md`, но loki читает её
+только с `LOKI_PROMPT_INJECTION=1` (теперь loki_runner передаёт всегда).
+**Надёжный pattern для больших задач** (inline steer поглощается PRD-контекстом):
+1. Создать task.md PRD-файл с директивой (внутри VM).
+2. `loki start --provider cline --simple task.md` — loki модифицирует существующий
+   код, делает git-коммит.
+3. `microcode status` — посмотреть результат; `msb cp` — скопировать на хост.
 
 ## Ключевое достижение: cline работает без Bun через node-shim
 
@@ -98,6 +112,14 @@ PATH.
     `127.0.0.1` по умолчанию → нужен `--host 0.0.0.0` для доступа с хоста.
     Требует fastapi/uvicorn (pypi.org в allowlist + pip install).
 20. **env-substitution** `${VAR}` в sandbox.env (секреты по имени, не инлайн).
+21. **steer требует `LOKI_PROMPT_INJECTION=1`** — иначе loki игнорирует
+    HUMAN_INPUT.md. loki_runner теперь передаёт всегда (коммит `6115ee7`).
+22. **steer через PRD-файл надёжнее** inline-промпта — системный PRD-контекст
+    loki поглощает короткие директивы. Создать task.md в VM → `loki start task.md`.
+23. **loki dashboard**: биндится на `127.0.0.1` → `--host 0.0.0.0` для доступа
+    с хоста через port-forward.
+24. **orcaн-карточки priority**: CSS `.todo-item.is-priority { background: #fff3e0; }`
+    + бейдж «Срочно» — loki добавил по steer-директиве.
 
 ## CLI команды (полный список)
 
