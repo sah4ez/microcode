@@ -1,7 +1,8 @@
-"""microcode CLI — validate / plan / apply / destroy / show / doctor."""
+"""microcode CLI — validate / plan / apply / destroy / show / doctor / steer / status / rollback."""
 
 from __future__ import annotations
 
+import shlex
 import sys
 from pathlib import Path
 
@@ -257,6 +258,83 @@ def show(file: str = typer.Argument(None)):
     logging_utils.console.print(
         Panel(m.model_dump_json(indent=2), title=f"resolved manifest — {path}", border_style="cyan")
     )
+
+
+@app.command()
+def steer(
+    file: str = typer.Argument(None),
+    message: str = typer.Argument(..., help="directive to inject into the running loki session"),
+):
+    """Inject a steering directive into a running loki session (async).
+
+    Appends the message to .loki/HUMAN_INPUT.md inside the VM. Loki reads it
+    on the next RARV iteration and incorporates it into the prompt. Does NOT
+    pause loki — it's an asynchronous course correction.
+    """
+    from microcode.runners import SkillkitRunner
+
+    path, m = _load(file)
+    name = m.sandbox.name
+    cmd = [
+        "msb", "exec", name, "--user", "loki", "--",
+        "bash", "-c", f"mkdir -p /workspace/.loki && printf '%s\\n' {shlex.quote(message)} >> /workspace/.loki/HUMAN_INPUT.md",
+    ]
+    logging_utils.cmd(" ".join(cmd))
+    try:
+        SkillkitRunner().run([cmd])
+        logging_utils.ok(f"steer directive injected into '{name}'")
+    except MicrocodeError as e:
+        logging_utils.error(str(e))
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def status(file: str = typer.Argument(None)):
+    """Show the running loki session status: phase, iteration, recent commits."""
+    from microcode.runners import SkillkitRunner
+
+    path, m = _load(file)
+    name = m.sandbox.name
+    # gather: orchestrator state + recent git log + workspace listing
+    cmd = [
+        "msb", "exec", name, "--user", "loki", "--", "bash", "-c",
+        "echo '=== PHASE / STATE ==='; "
+        "cat /workspace/.loki/state/orchestrator.json 2>/dev/null || echo '(no state)'; "
+        "echo; echo '=== RECENT COMMITS ==='; "
+        "git -C /workspace log --oneline -5 2>/dev/null || echo '(no git)'; "
+        "echo; echo '=== WORKSPACE ==='; "
+        "ls -la /workspace/ 2>/dev/null | head -20",
+    ]
+    logging_utils.cmd(" ".join(cmd[:6]) + " ...")
+    try:
+        SkillkitRunner().run([cmd])
+    except MicrocodeError as e:
+        logging_utils.error(str(e))
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def rollback(
+    file: str = typer.Argument(None),
+    to: str = typer.Option(None, "--to", help="git commit/checkpoint hash to reset to (default: HEAD~1)"),
+):
+    """Roll back the workspace to a previous loki git checkpoint."""
+    from microcode.runners import SkillkitRunner
+
+    path, m = _load(file)
+    name = m.sandbox.name
+    target = to or "HEAD~1"
+    cmd = [
+        "msb", "exec", name, "--user", "loki", "--",
+        "bash", "-c", f"git -C /workspace reset --hard {target} && echo 'rolled back to {target}'",
+    ]
+    logging_utils.cmd(" ".join(cmd[:6]) + " ...")
+    try:
+        SkillkitRunner().run([cmd])
+        logging_utils.ok(f"rolled back to {target}")
+    except MicrocodeError as e:
+        logging_utils.error(str(e))
+        raise typer.Exit(code=1)
 
 
 @app.command(name="doctor")

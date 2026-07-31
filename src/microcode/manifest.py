@@ -194,6 +194,21 @@ class LokiConfig(BaseModel):
     max_budget_usd: float = Field(default=10.0, ge=0)
     effort: Literal["low", "standard", "high"] = "high"
     sdk_mode: Literal["full", "minimal"] = "full"
+    stop_after_phase: str | None = Field(
+        default=None,
+        description=(
+            "loki stops after completing this SDLC phase (BOOTSTRAP/DISCOVERY/"
+            "ARCHITECTURE/DEEPEN_PLAN/INFRASTRUCTURE/DEVELOPMENT/QA/DEPLOYMENT/"
+            "GROWTH). Enables human review between phases."
+        ),
+    )
+    start_phase: str | None = Field(
+        default=None,
+        description=(
+            "loki starts from this SDLC phase (skip earlier phases). Use after "
+            "reviewing the output of a stop_after_phase run."
+        ),
+    )
     quality_gates: QualityGates = Field(default_factory=QualityGates)
     memory: LokiMemory = Field(default_factory=LokiMemory)
     proofs: LokiProofs = Field(default_factory=LokiProofs)

@@ -81,6 +81,14 @@
         "max_budget_usd": { "type": "number", "minimum": 0 },
         "effort": { "type": "string", "enum": ["low", "standard", "high"] },
         "sdk_mode": { "type": "string", "enum": ["full", "minimal"] },
+        "stop_after_phase": {
+          "type": ["string", "null"],
+          "description": "loki stops after this SDLC phase (human review checkpoint)"
+        },
+        "start_phase": {
+          "type": ["string", "null"],
+          "description": "loki starts from this SDLC phase (skip earlier phases)"
+        },
         "quality_gates": {
           "type": "object",
           "additionalProperties": false,

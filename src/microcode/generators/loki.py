@@ -31,6 +31,11 @@ def _loki_yaml(m: PlatformManifest) -> dict:
     # explicit model override for the active provider
     if l.model:
         cfg["model"] = l.model
+    # human-in-the-loop phase control
+    if l.stop_after_phase:
+        cfg["stop_after_phase"] = l.stop_after_phase
+    if l.start_phase:
+        cfg["start_phase"] = l.start_phase
     # merge user overrides last so they win
     if l.config_overrides:
         cfg.update(l.config_overrides)

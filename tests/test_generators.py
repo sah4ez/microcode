@@ -185,6 +185,20 @@ def test_loki_model_overridden_by_config_overrides():
     assert cfg["model"] == "glm-4.6"
 
 
+def test_loki_phase_control_written_to_config():
+    m = _m(loki={"stop_after_phase": "ARCHITECTURE", "start_phase": "DEVELOPMENT"})
+    cfg = yaml.safe_load(generate_loki(m).artifacts[0].content)
+    assert cfg["stop_after_phase"] == "ARCHITECTURE"
+    assert cfg["start_phase"] == "DEVELOPMENT"
+
+
+def test_loki_phase_control_omitted_when_none():
+    m = _m()
+    cfg = yaml.safe_load(generate_loki(m).artifacts[0].content)
+    assert "stop_after_phase" not in cfg
+    assert "start_phase" not in cfg
+
+
 # ---- bootstrap ------------------------------------------------------------ #
 
 def test_bootstrap_is_bash_with_set_e_and_packages():

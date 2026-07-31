@@ -211,6 +211,9 @@ contains a secret value.
 | `microcode build [file]` | Build a cached base-image snapshot (bootstrap once) |
 | `microcode snapshot save/load` | Export/import a snapshot for portability |
 | `microcode destroy [file]` | Stop/remove the VM and clean generated state |
+| `microcode steer [file] "msg"` | Inject an async directive into a running loki session |
+| `microcode status [file]` | Show loki phase, iteration, recent commits, workspace |
+| `microcode rollback [file] [--to HASH]` | Revert workspace to a previous git checkpoint |
 | `microcode show [file]` | Dump the resolved manifest |
 | `microcode doctor` | Check `msb` and `skillkit` are on PATH |
 
@@ -248,6 +251,34 @@ microcode snapshot load mcd-base.tar.zst             # import on host2
 ```
 
 See [`examples/cached-base.yaml`](examples/cached-base.yaml).
+
+### Human-in-the-loop: steer, status, rollback, phased runs
+
+Loki is autonomous by design, but microcode gives you three ways to interact
+mid-run without stopping it, plus phased execution for review checkpoints.
+
+**Steer** — inject an async directive (loki reads it on the next iteration):
+```bash
+microcode steer examples/todo-api-cline/platform.yaml "Use FastAPI, not http.server"
+```
+
+**Status** — see the current phase, iteration, recent commits, workspace:
+```bash
+microcode status examples/todo-api-cline/platform.yaml
+```
+
+**Rollback** — revert the workspace to a previous git checkpoint:
+```bash
+microcode rollback examples/todo-api-cline/platform.yaml              # HEAD~1
+microcode rollback examples/todo-api-cline/platform.yaml --to abc123  # specific
+```
+
+**Phased runs** — stop after a phase for human review, then resume:
+```yaml
+loki:
+  stop_after_phase: ARCHITECTURE   # run 1: stop after planning
+  # start_phase: DEVELOPMENT       # run 2: uncomment, remove stop_after_phase
+```
 
 ## Development
 
