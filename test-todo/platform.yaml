@@ -121,8 +121,11 @@ sandbox:
       - { action: allow, target: github.com, proto: tcp, port: 443 }
       - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
       - { action: allow, target: release-assets.githubusercontent.com, proto: tcp, port: 443 }
-      # node tarball (bootstrap качает node)
+      # node tarball (bootstrap кчает node)
       - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+      # PyPI (loki dashboard требует fastapi/uvicorn/sqlalchemy)
+      - { action: allow, target: pypi.org, proto: tcp, port: 443 }
+      - { action: allow, target: files.pythonhosted.org, proto: tcp, port: 443 }
       - { action: allow, target: 1.1.1.1, proto: tcp, port: 53 }
       - { action: allow, target: 8.8.8.8, proto: tcp, port: 53 }
     # Альтернативные DNS: хост-резолверы иногда не резолвят bun.sh и др.
@@ -152,3 +155,4 @@ sandbox:
 
   ports:
     - "8000:8000"                    # notes-API будет слушать тут
+    - "57374:57374"                  # loki dashboard (web UI для RARV прогресса)
