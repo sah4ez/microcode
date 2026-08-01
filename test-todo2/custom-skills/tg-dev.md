@@ -24,26 +24,40 @@ through the `tgp-go` package. The old v2 `tg transport --services ...` command
 ## Environment (already installed by bootstrap)
 
 - Go toolchain 1.26.x at `/usr/local/go/bin/go` (symlinked to `/usr/local/bin/go`).
-- `tg` v3 CLI at `/usr/local/bin/tg`.
+- `tg` v3 CLI at `/usr/local/bin/tg` (`tg --version` works).
 - transport plugin `tgp-go` installed via `tg pkg add` (plugins: `astg` parser,
-  `server` = Fiber server, `client-go`, `client-ts`, `swagger`).
+  `server` = Fiber server, `client-go`, `client-ts`, `swagger`). `tg pkg list`
+  shows `astg` and `server` (v1.0.8, ✓).
 - built-in agent skills via `tg skills install`.
 
-Confirm before coding: `go version` (≥1.26), `tg --version`, `tg plugin doc server`.
+Confirm before coding: `go version` (≥1.26), `tg --version`, `tg pkg list`.
 
-## Project rule: tg is the ONLY way to expose HTTP here
+## ⚠️ Project rule: tg v3 codegen is MANDATORY — no hand-written fiber routes
 
-Every HTTP endpoint on this project is defined as a method on a `// @tg`-annotated
-interface and served by the generated fiber transport. Do **not** register routes
-by hand with `fiber.New()` — let codegen own routing. Access the running app via
-the generated `srv.Fiber()` only when you must.
+**This is a hard requirement, not a preference.** The HTTP transport layer MUST
+be **generated** by the tg v3 toolchain. Do NOT write fiber handlers / route
+registration by hand with `fiber.New()` / `app.Get(...)` / `app.Post(...)`.
+
+Every HTTP endpoint on this project is:
+1. defined as a method on a `// @tg`-annotated Go interface in `contracts/`, then
+2. the fiber transport is GENERATED via `tg server -o internal/transport`.
+
+Only the business logic (service implementation of the contract) and the SQLite
+repository are hand-written. The HTTP wiring (routing, request parsing, response
+serialization, fiber app setup) comes ENTIRELY from `tg server`.
+
+**The module path MUST include `/v3`:** `github.com/seniorGolang/tg/v3`. Without
+the `/v3` suffix (`github.com/seniorGolang/tg`) the module resolves to nothing on
+the Go proxy and you will incorrectly conclude tg is unavailable. It IS available
+— `tg --version` and `tg pkg list` prove it. Do not fall back to hand-written
+fiber "because tg cannot be installed" — tg is already installed; use it.
 
 ## Module bootstrap
 
 ```bash
 go mod init github.com/<you>/<service>          # once
-go get github.com/seniorGolang/tg/v3@latest     # the framework (v3!)
-# tg CLI + tgp-go are already installed in the VM; no go install needed.
+go get github.com/seniorGolang/tg/v3@latest     # the framework — /v3 is REQUIRED
+# tg CLI + tgp-go are already installed in the VM; no `go install` needed.
 ```
 
 ## 1. Define the contract (the source of truth)
@@ -219,19 +233,28 @@ func main() {
 
 ## Verification gate (this module feeds loki's VERIFY phase)
 
-Before declaring a feature done:
+Before declaring a feature done — **all of these must pass**, in order:
+- `go mod tidy` clean;
 - `go vet ./...` clean;
 - `go build ./...` clean;
-- transport regenerated (`go generate ./...`) and the generated tree committed;
+- **`tg pkg list` shows `astg` + `server` installed** AND **`internal/transport/`
+  exists and was produced by `tg server -o internal/transport`** (this is the
+  hard gate — if the transport is hand-written, the task is NOT done);
+- `github.com/seniorGolang/tg/v3` is a real line in `go.mod` (proves tg is wired
+  in, not bypassed);
 - one test per contract method (see tdd-rules.md), including a persistence test
   that closes + reopens the sqlite file and asserts data survived;
-- `go run ./cmd/server` boots and the curl examples in README return the
-  documented status codes (see api-contract-rules.md).
+- `go run main.go` boots and the curl examples in README return the documented
+  status codes (see api-contract-rules.md).
 
 ## Never
 
-- Use v2 (`tg transport`) — this project is v3 (`go generate` via tgp-go).
-- Hand-write fiber routes for contract endpoints — codegen owns them.
+- **Hand-write fiber routes / handlers / `fiber.New()` / `app.Get/Post/...` for
+  contract endpoints.** This is the #1 failure mode — falling back to hand-written
+  fiber "because tg can't be installed". tg IS installed (`tg --version`); USE IT.
+- Claim "tg has no resolvable versions" and skip codegen — that only happens if
+  you drop the `/v3` suffix. The module is `github.com/seniorGolang/tg/v3`.
+- Use v2 (`tg transport`) — this project is v3 (`tg server -o ...` via tgp-go).
 - Skip regenerating `internal/transport` after editing a `// @tg` interface.
 - Reach for CGO-backed `mattn/go-sqlite3` — use `modernc.org/sqlite`.
 - Put SQL in the service layer — it lives in `storage/sqlite` only.
