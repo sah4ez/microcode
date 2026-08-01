@@ -122,21 +122,67 @@ def apply(
     )
 
     # When booting from a snapshot, bind mounts become named volumes (msb can't
-    # bind-mount with --from-snapshot). Seed each volume from its host dir via
-    # `msb cp` so the VM sees the same files as a normal bind mount would.
+    # bind-mount with --from-snapshot). Seed each volume from its host dir so the
+    # VM sees the same files as a normal bind mount would.
+    #
+    # We can't use `msb cp <dir> vm:/dest` directly: it ALWAYS nests the dir
+    # inside /dest (-> /dest/<dir>), regardless of a trailing slash, which would
+    # put host ./src at guest /workspace/src instead of /workspace. So we tar the
+    # host dir CONTENTS (-C <dir> .), copy the single tarball via `msb cp`, and
+    # untar it at the guest dest — a true merge, like a bind mount.
+    #
+    # Named volumes also PERSIST across applies (a real bind mount always shows
+    # the current host state), so we clear the guest dest first — sparing any
+    # nested mount points (other volumes mounted under this path).
     if not dry_run and m.sandbox.init.snapshot.from_snapshot:
         from microcode.generators.sandbox import from_snapshot_mount_map
         from pathlib import Path as _P
+        import os as _os
+        import tempfile as _tf
 
         runner = SkillkitRunner(cwd=str(root))
-        for host_path, _vol, guest_dest in from_snapshot_mount_map(m):
+        mount_dests = [mt.dest for mt in m.sandbox.mounts]
+        mounts = sorted(
+            from_snapshot_mount_map(m),
+            key=lambda t: t[2].count("/"),  # shallow mounts first
+        )
+        for host_path, vol, guest_dest in mounts:
             src = _P(root) / host_path if not _P(host_path).is_absolute() else _P(host_path)
             if not src.exists():
                 continue
-            # cp into the VM at the guest dest (volume root); recursive for dirs.
-            logging_utils.step(f"Seeding volume {guest_dest} from {src}")
+            # (1) clear the guest dest (children only) so the volume mirrors the
+            #     host dir exactly, sparing nested mount points.
+            nested = [d for d in mount_dests if d != guest_dest and d.startswith(guest_dest.rstrip("/") + "/")]
+            logging_utils.step(f"Clearing {guest_dest} (mirrors {src})")
             try:
-                runner.run([["msb", "cp", str(src), f"{m.sandbox.name}:{guest_dest}"]])
+                prune = "".join(f" -path {nd} -prune -o" for nd in nested)
+                runner.run([[
+                    "msb", "exec", m.sandbox.name, "--user", "root", "--",
+                    "bash", "-c",
+                    f"find {guest_dest} -mindepth 1 -maxdepth 1{prune} -exec rm -rf {{}} +",
+                ]])
+            except RunnerError as e:
+                logging_utils.warn(f"could not clear {guest_dest}: {e}")
+
+            # (2) tar the host dir CONTENTS, msb cp the tarball, untar at the
+            #     guest dest. COPYFILE_DISABLE avoids macOS xattr noise in the
+            #     guest's GNU tar; --format=ustar keeps it portable.
+            logging_utils.step(f"Seeding volume {guest_dest} from {src}")
+            tarball = _P(_tf.mkstemp(suffix=".tgz")[1])
+            try:
+                import subprocess as _sp
+                _env = dict(_os.environ, COPYFILE_DISABLE="1")
+                _sp.run(
+                    ["tar", "czf", str(tarball), "--format=ustar", "-C", str(src), "."],
+                    check=True, env=_env,
+                )
+                guest_tar = "/tmp/.microcode-seed.tgz"
+                runner.run([["msb", "cp", str(tarball), f"{m.sandbox.name}:{guest_tar}"]])
+                runner.run([[
+                    "msb", "exec", m.sandbox.name, "--user", "root", "--",
+                    "bash", "-c",
+                    f"tar xzf {guest_tar} -C {guest_dest}/ && rm -f {guest_tar}",
+                ]])
                 # named volumes are owned by root; chown to the unprivileged
                 # user so skillkit/loki can write (.cline/skills, .loki/, etc.)
                 runner.run([[
@@ -145,6 +191,11 @@ def apply(
                 ]])
             except RunnerError as e:
                 logging_utils.warn(f"could not seed {guest_dest}: {e}")
+            finally:
+                try:
+                    tarball.unlink()
+                except OSError:
+                    pass
 
     if in_vm:
         # skillkit commands are wrapped in `msb exec`; the VM now exists.

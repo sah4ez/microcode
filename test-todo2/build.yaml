@@ -1,0 +1,210 @@
+# microcode — пример: cline + несколько skill-провайдеров внутри VM.
+#
+# Один манифест декларативно описывает:
+#   1. НАВЫКИ из РАЗНЫХ источников (obra/superpowers с GitHub + локальные
+#      overlay-модули), устанавливаемые/переводимые ВНУТРИ VM (skills.in_vm),
+#      + кастомные скилл-модули loki поверх встроенных.
+#   2. ОРКЕСТРАЦИЮ: loki с provider cline на модели GLM (z.ai), суженный SDLC
+#      (effort: standard), кастомные гейты, кросс-проектная память.
+#   3. СРЕДУ: stock debian VM, allowlist-сеть (только z.ai + npm + pypi),
+#      результат в примонтированном src/.
+#
+# Поток данных:
+#   platform.yaml
+#     │  microcode apply
+#     ├─ skills (in VM): msb exec ... skillkit install obra/superpowers ...
+#     │                  + translate → cline SKILL.md в skills/
+#     ├─ overlay модули: ./custom-skills → /workspace/skills (mount)
+#     ├─ sandbox:        msb create debian + bootstrap.sh (node/loki/cline/shim)
+#     └─ loki (in VM):   loki --provider cline --model glm-5.2 PRD.md
+#                          читает skills/00-index.md (наш overlay)
+#                          → строит сервис в /workspace (виден на хосте как src/)
+#
+# Запуск:
+#   export ZAI_BUSINESS_BASE_URL="https://api.z.ai" \
+#          ZAI_OAUTH_ORIGIN="https://chat.z.ai" \
+#          ZAI_OAUTH_CLIENT_ID="client_..."   # (см. README, не в манифесте!)
+#   microcode apply examples/cline-multi-skills/platform.yaml
+
+version: 1
+
+project:
+  name: notes-api
+  workdir: /workspace
+  state_dir: .microcode
+
+# ───────────────────────────────────────────────────────────────────────── #
+# SKILLS — навыки из РАЗНЫХ провайдеров, устанавливаемые ВНУТРИ VM.         #
+# ───────────────────────────────────────────────────────────────────────── #
+skills:
+  in_vm: true                         # skillkit бежит внутри VM (после bootstrap),
+                                     # не на хосте — единое окружение с loki.
+  agents: [cline]                    # фиксированный набор = провайдеры loki 1:1.
+
+  # (1) GitHub-source: публичный репо скиллов (obra/superpowers).
+  #     skillkit клонирует/тянет нужные скиллы и переводит под cline.
+  install:
+    - source: obra/superpowers
+      skills:
+        - test-driven-development    # RED-GREEN-REFACTOR
+        - systematic-debugging       # 4-фазный root-cause перед фиксом
+        - verification-before-completion  # пруфы готовности
+        - writing-plans              # bite-sized план
+        - executing-plans            # пошаговая реализация
+
+  # (2) Локальные overlay-модули loki (не через skillkit) монтируются отдельно
+  #     в sandbox.mounts ниже (./custom-skills → /workspace/skills). Они
+  #     дополняют/переопределяют встроенные модули loki: 00-index.md +
+  #     tdd-rules.md + security-checks.md + api-contract-rules.md.
+
+  translate:
+    target_agent: cline              # все скиллы переводятся под формат cline
+    output_dir: .skills-generated    # отдельная папка (не конфликтует с overlay /workspace/skills)
+    also_into_memory: true           # зеркалим SKILL.md в .loki/memory/skills/
+
+# ───────────────────────────────────────────────────────────────────────── #
+# LOKI — оркестрация: cline + GLM, суженный SDLC, кастомные гейты.          #
+# ───────────────────────────────────────────────────────────────────────── #
+loki:
+  provider: cline                    # loki вызывает cline CLI (node-shim в VM)
+  model: glm-5.2                     # модель z.ai (→ CLINE_MODEL + LOKI_MODEL_OVERRIDE)
+  max_iterations: 15
+  max_budget_usd: 5.0
+  effort: standard                   # 6 фаз SDLC (без DEEPEN_PLAN можно low)
+  sdk_mode: full
+  quality_gates:
+    enabled: true
+    opt_out:
+      - magic_debate                 # нет UI — Gate 8 не нужен
+  memory:
+    enabled: true
+    managed: true
+    storage:                         # кросс-проектная память (volume)
+      # enabled: true
+      volume: loki-memory
+      dest: /data/loki-memory
+  proofs:
+    enabled: true                    # evidence-receipts в .loki/proofs/
+  provider_clis: [cline]             # bootstrap ставит только cline (+ shim)
+  config_overrides:
+    # стартуем со стадии разработки (PRD уже готов, design тривиален)
+    start_phase: DEVELOPMENT
+
+# ───────────────────────────────────────────────────────────────────────── #
+# SANDBOX — stock debian, allowlist-сеть, overlay skills, результат в src/. #
+# ───────────────────────────────────────────────────────────────────────── #
+sandbox:
+  image: debian
+  tag: bookworm-slim
+  name: notes-build
+  cpus: 4
+  memory: 4096
+  root_disk: 8G
+
+  network:
+    # allowlist: запрет по умолчанию. VM ходит только к явно разрешённым хостам.
+    # cline/node-shim использует zai-coding-plan OAuth → нужен api.z.ai.
+    mode: allowlist
+    default_egress: deny
+    allow:
+      # LLM-провайдер (z.ai / GLM) — OAuth endpoint cline
+      - { action: allow, target: api.z.ai, proto: tcp, port: 443 }
+      - { action: allow, target: "*.z.ai", proto: tcp, port: 443 }
+      # apt (bootstrap ставит пакеты)
+      - { action: allow, target: deb.debian.org, proto: tcp, port: 443 }
+      - { action: allow, target: "*.debian.org", proto: tcp, port: 443 }
+      - { action: allow, target: "*.debian.org", proto: tcp, port: 80 }
+      # npm (node, loki-mode, cline, @cline/core)
+      - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
+      - { action: allow, target: bun.sh, proto: tcp, port: 443 }
+      # GitHub (skillkit тянет obra/superpowers; git clone)
+      - { action: allow, target: github.com, proto: tcp, port: 443 }
+      - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
+      - { action: allow, target: release-assets.githubusercontent.com, proto: tcp, port: 443 }
+      # node tarball (bootstrap качает node)
+      - { action: allow, target: nodejs.org, proto: tcp, port: 443 }
+      # Go modules (PRD-001 требует Go-сервис; go get/tidy тянут зависимости отсюда)
+      - { action: allow, target: proxy.golang.org, proto: tcp, port: 443 }
+      - { action: allow, target: "*.golang.org", proto: tcp, port: 443 }
+      - { action: allow, target: sum.golang.org, proto: tcp, port: 443 }
+      # Go toolchain download (bootstrap ставит актуальный Go — apt даёт лишь 1.19,
+      # а github.com/seniorGolang/tg/v2 требует go 1.26).
+      - { action: allow, target: go.dev, proto: tcp, port: 443 }
+      - { action: allow, target: dl.google.com, proto: tcp, port: 443 }
+      - { action: allow, target: 1.1.1.1, proto: tcp, port: 53 }
+      - { action: allow, target: 8.8.8.8, proto: tcp, port: 53 }
+    # Альтернативные DNS: хост-резолверы иногда не резолвят bun.sh и др.
+    # Пиним надёжные upstream-резолверы (микросандбокс форвардит туда DNS).
+    dns:
+      nameservers: [1.1.1.1, 8.8.8.8]
+      query_timeout_ms: 3000
+
+  init:
+    packages:
+      # NOTE: golang-go из apt = Go 1.19 — слишком стар для
+      # github.com/seniorGolang/tg/v3 (требует go 1.26). Актуальный toolchain +
+      # tg CLI v3 + плагин генерации транспорта tgp-go ставим в extra_shell.
+      apt: [curl, git, ca-certificates, python3, python3-pip, python3-venv, unzip]
+      npm_global: [loki-mode, skillkit]
+      bun_global: [skillkit]
+      # Окружение для PRD-001 (Go-сервис на github.com/seniorGolang/tg/v3):
+      #   1. Go toolchain 1.26.x (с go.dev внутри VM; go.dev/dl.google.com в allowlist)
+      #   2. tg v3 CLI: go install github.com/seniorGolang/tg/v3/cmd/tg@latest
+      #   3. плагин генерации транспорта: tg pkg add https://github.com/seniorGolang/tgp-go
+      #      (tgp-go даёт плагины server(Fiber)/client-go/client-ts/swagger;
+      #       транспорт достраивается через `go generate ./...` — wazero WASM runtime)
+      #   4. встроенные agent skills: tg skills install
+      extra_shell: |
+        set -e
+        echo '[bootstrap] Go toolchain (go.dev, 1.26.x)'
+        GO_VER="1.26.5"
+        ARCH="$(uname -m | sed 's/aarch64/arm64/; s/x86_64/amd64/')"
+        curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-${ARCH}.tar.gz" -o /tmp/go.tgz \
+          || curl -fsSL "https://dl.google.com/go/go${GO_VER}.linux-${ARCH}.tar.gz" -o /tmp/go.tgz
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf /tmp/go.tgz
+        rm -f /tmp/go.tgz
+        ln -sf /usr/local/go/bin/go /usr/local/bin/go
+        ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+        /usr/local/go/bin/go version
+
+        echo '[bootstrap] tg v3 CLI + transport plugin (tgp-go)'
+        export PATH="/usr/local/go/bin:$PATH"
+        export GOPATH="${GOPATH:-/root/go}"
+        go install github.com/seniorGolang/tg/v3/cmd/tg@latest
+        ln -sf "$GOPATH/bin/tg" /usr/local/bin/tg
+        tg --version 2>/dev/null || true
+        # transport-codegen plugins (WASM, built via wazero — slow first build).
+        # Install ONLY what this project needs: astg (the @tg parser, required)
+        # and server (Fiber server generator). NB: a bare `tg pkg add <repo>`
+        # tries to build ALL 10 plugins and hangs; the :<name> suffix selects
+        # one, and --fail-on-missing makes it non-interactive.
+        mkdir -p /root/.agents
+        HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg   --fail-on-missing || true
+        HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:server --fail-on-missing || true
+        # The agent runs as the unprivileged `loki` user. tg plugins live under
+        # /root/.tg (HOME-scoped). Mirror them for loki so `tg plugin run server`
+        # / `go generate` work in the loki session too.
+        for tgt in /home/loki/.tg /home/loki/.agents; do
+          src="/root${tgt#/home/loki}"
+          if [ -e "$src" ]; then cp -a "$src" "$tgt"; fi
+        done
+        chown -R loki:loki /home/loki/.tg /home/loki/.agents 2>/dev/null || true
+    snapshot:
+      # --- BUILD mode (active): recapture snapshot with Go 1.26 + tg v3 + tgp-go ---
+      #     run `microcode build test-todo2/build.yaml`, then flip back to
+      #     from_snapshot for fast applies.
+      enabled: true
+      # --- APPLY mode: boot from the pre-built snapshot (re-enable after build) ---
+      # from_snapshot: mcd-base
+      name: mcd-base
+
+  mounts:
+    # (A) overlay скилл-модули loki — ДОПОЛНЯТ/ПЕРЕОПРЕДЕЛЯЮТ встроенные.
+    #     loki читает /workspace/skills/00-index.md → грузит наши модули по фазе.
+    - { host: ./custom-skills, dest: /workspace/skills, readonly: false }
+    # (B) рабочая директория — результат выполнения loki сохраняется на хосте.
+    - { host: ./src, dest: /workspace, readonly: false }
+
+  ports:
+    - "8000:8000"                    # notes-API будет слушать тут
