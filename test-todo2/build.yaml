@@ -127,6 +127,12 @@ sandbox:
       - { action: allow, target: proxy.golang.org, proto: tcp, port: 443 }
       - { action: allow, target: "*.golang.org", proto: tcp, port: 443 }
       - { action: allow, target: sum.golang.org, proto: tcp, port: 443 }
+      # GCS-bucket proxy-golang-org fallback: некоторые модули (напр.
+      # github.com/cloudflare/circl через ProtonMail/go-crypto → go-git/v5,
+      # зависимость самого tg) отдаются только отсюда, не из кэша proxy.golang.org.
+      - { action: allow, target: storage.googleapis.com, proto: tcp, port: 443 }
+      - { action: allow, target: "*.googleapis.com", proto: tcp, port: 443 }
+      - { action: allow, target: "*.pkg.go.dev", proto: tcp, port: 443 }
       # Go toolchain download (bootstrap ставит актуальный Go — apt даёт лишь 1.19,
       # а github.com/seniorGolang/tg/v2 требует go 1.26).
       - { action: allow, target: go.dev, proto: tcp, port: 443 }
@@ -180,11 +186,31 @@ sandbox:
         # tries to build ALL 10 plugins and hangs; the :<name> suffix selects
         # one, and --fail-on-missing makes it non-interactive.
         mkdir -p /root/.agents
-        HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg   --fail-on-missing || true
-        HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:server --fail-on-missing || true
+        #
+        # tg v3 has a download race-condition (downloadWithProgress returns before
+        # the file is flushed → `Failed to extract archive ...-skills.tar.gz: EOF`)
+        # that fires deterministically under the microsandbox network layer. If the
+        # stock `tg pkg add` fails, apply the patch and rebuild tg from source,
+        # then retry. See test-todo2/tg-patch/README.md for the root-cause analysis.
+        tg_install_plugins() {
+          HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg   --fail-on-missing && \
+          HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:server --fail-on-missing
+        }
+        if ! tg_install_plugins; then
+          echo '[bootstrap] tg pkg add hit the download race; patching + rebuilding tg'
+          rm -rf /tmp/tgsrc && git clone --depth 1 --branch v3.0.5 https://github.com/seniorGolang/tg /tmp/tgsrc
+          # Apply the committed race-condition fix (drop the `default:` arm in
+          # downloadWithProgress that returns before close(progress) flushes the
+          # downloaded file → extractArchive hits EOF). See custom-skills/tg-patch/.
+          cp /workspace/skills/tg-patch/install.go.patched \
+             /tmp/tgsrc/internal/installer/managers/installation/install.go
+          ( cd /tmp/tgsrc && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /usr/local/bin/tg ./cmd/tg )
+          rm -rf /tmp/tgsrc
+          tg_install_plugins || echo "[bootstrap] WARN: tg plugins still failed"
+        fi
         # The agent runs as the unprivileged `loki` user. tg plugins live under
-        # /root/.tg (HOME-scoped). Mirror them for loki so `tg plugin run server`
-        # / `go generate` work in the loki session too.
+        # /root/.tg (HOME-scoped). Mirror them for loki so `tg server` /
+        # `tg client-go` work in the loki session too.
         for tgt in /home/loki/.tg /home/loki/.agents; do
           src="/root${tgt#/home/loki}"
           if [ -e "$src" ]; then cp -a "$src" "$tgt"; fi

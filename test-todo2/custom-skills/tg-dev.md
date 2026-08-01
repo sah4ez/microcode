@@ -136,23 +136,23 @@ Annotation vocabulary (verbatim, from the docs):
 
 ## 2. Run codegen (v3 plugin workflow — NOT `tg transport`)
 
-In v3 the transport is built by the **tgp-go** plugin via `go generate ./...`.
-The plugin (WASM, runs on wazero) parses the `// @tg` interfaces and emits the
-fiber server/client/swagger. Two equivalent ways to trigger it:
+In v3 the transport is built by the **tgp-go** plugin. Contracts live in a
+`contracts/` dir (set `--contracts-dir`); codegen is invoked as a `tg`
+subcommand (NOT `go generate`, NOT `tg plugin run`). The plugin parses the
+`// @tg` interfaces and emits a fiber server (the `server` plugin), plus
+optional clients/swagger. **Requires a `go.mod` at the project root** or it
+fails with "go.mod not found".
 
 ```bash
-# (a) project-wide: the plugin registers `go generate` directives.
-go generate ./...
-
-# (b) explicit plugin invocation (if the project has no go:generate lines):
-tg plugin run server    # generate the Fiber server into internal/transport
-tg plugin run client-go # optional: typed Go client (use it in tests!)
-tg plugin run swagger   # optional: OpenAPI 3.0 to api/swagger.yaml
+tg server    -o transport                  # generate the Fiber server (REQUIRED)
+tg client-go -o clients/go                 # optional: typed Go client (use in tests!)
+tg swagger   -o api/swagger.yaml           # optional: OpenAPI 3.0
+# contracts dir defaults to ./contracts; override with --contracts-dir <path>
 ```
 
-If unsure which subcommand/flags a plugin takes, inspect it: `tg plugin doc server`.
-Re-run after **every** contract change. Commit the generated tree (never edit it
-by hand).
+Inspect a plugin's flags/annotations: `tg plugin doc server`, `tg plugin doc astg`.
+Re-run `tg server -o transport` after **every** contract change. Commit the
+generated tree (never edit it by hand).
 
 ## 3. Implement the service + repository
 
