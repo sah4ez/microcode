@@ -33,11 +33,45 @@
 - **Loki dashboard доступен** на http://localhost:57374 (live RARV прогресс,
   Lab tab для постановки задач). Нужен `--host 0.0.0.0` + fastapi/uvicorn.
 - **Todo-app доступен** на http://localhost:8000 (UI с оранжевыми карточками для priority).
-- **Тесты: 79/79 зелёные.**
+- **Тесты: 85/85 зелёные.**
 - 7 примеров валидны: minimal, allowlist, full-stack, skills-in-vm,
   cached-base, todo-api-cline, cline-multi-skills.
 - Всё запушено в `origin/master` (github.com:sah4ez/microcode.git), последний
   коммит `6115ee7`.
+
+## test-todo2: Go+tg v3 рефакторинг (в работе, 2026-08-01)
+
+Цель: через `microcode apply test-todo2/build.yaml --prd src/PRD-001.md`
+рефакторить Python todo-сервис в **Go + github.com/seniorGolang/tg/v3 +
+go-fiber + SQLite** (`modernc.org/sqlite`, pure Go). Найдены и решены:
+
+- **tg v3 != v2**: v3 module `github.com/seniorGolang/tg/v3` (tag v3.0.5),
+  требует **go 1.26** (apt даёт лишь 1.19 — ставим Go 1.26.5 из go.dev в
+  `extra_shell`). Codegen — плагины WASM (`tgp-go`), команда `tg server -o
+  transport` (НЕ v2 `tg transport`, НЕ `go generate`). Контракты — Go-интерфейсы
+  с `// @tg` аннотациями; плагины ставятся `tg pkg add <repo>:<name>
+  --fail-on-missing` (только нужные: astg + server; без `:name` собирает все 10
+  и виснет).
+- **allowlist расширения**: `storage.googleapis.com`, `*.googleapis.com`,
+  `*.pkg.go.dev`, `proxy.golang.org`, `sum.golang.org`, `go.dev`, `dl.google.com`.
+  Причина: `github.com/cloudflare/circl` (через ProtonMail/go-crypto → go-git/v5,
+  зависимость tg) отдаётся **только** с GCS-bucket `storage.googleapis.com`, не
+  из основного кэша proxy.golang.org.
+- **БАГ tg v3 (race condition) — ИСПРАВЛЕН**: `tg pkg add` детерминированно падал
+  `Failed to extract archive astg-skills.tar.gz: EOF`. Корень — в
+  `internal/installer/managers/installation/install.go` → `downloadWithProgress()`:
+  ветка `case downloadErr = <-errChan:` возвращала success через `default:` select
+  ДО того, как `close(progress)` (в DownloadWithProgress) дописывал файл на диск.
+  extractArchive открывал **неполный** файл → EOF. Файл с github валиден (curl
+  качает полностью, md5 совпадает); race ловится под msb network layer
+  (другой timing планировщика, чем на хосте автора). Фикс — убрать `default:`,
+  ждать закрытия progressChan. Патч в `test-todo2/custom-skills/tg-patch/`
+  (install.go.patched + README с анализом). build.yaml extra_shell применяет
+  патч и пересобирает tg (clone v3.0.5 → cp patched → cross-compile linux/arm64)
+  если stock `tg pkg add` падает. Коммиты `da5ce88`, `037ca89`.
+  **Доказано**: после патча оба плагина (astg + server v1.0.8) ставятся, и
+  `tg server -o transport` генерит полный fiber-транспорт (15+ файлов) из
+  `// @tg` контракта.
 
 ## Steer — рабочий pattern (ДОКАЗАНО)
 
@@ -120,6 +154,28 @@ PATH.
     с хоста через port-forward.
 24. **orcaн-карточки priority**: CSS `.todo-item.is-priority { background: #fff3e0; }`
     + бейдж «Срочно» — loki добавил по steer-директиве.
+25. **`--prd` host→guest path**: `--prd src/PRD-001.md` передавался дословно в
+    `loki start` после `cd /workspace`, но `./src` монтируется В `/workspace`
+    (не `/workspace/src`) → file not found. `_resolve_prd_guest_path()` в
+    `loki_runner.py` мапит prd-путь против mounts → `src/PRD-001.md` →
+    `PRD-001.md` (= `/workspace/PRD-001.md`). + 6 тестов в `test_loki_runner.py`.
+26. **named-volume seeding (from_snapshot)**: `msb cp <dir> vm:/dest` ВСЕГДА
+    вкладывает dir ВНУТРЬ /dest (→ `/workspace/src` вместо `/workspace`),
+    независимо от trailing slash; + named volumes персистят между applies
+    (stale Python от прошлых PRD). Фикс в `orchestrator.py`: tar содержимое
+    host-директории (`-C <dir> .`), `msb cp` tarball, untar на guest dest
+    (true merge как bind-mount); перед этим `find ... -mindepth 1 ... -exec rm`
+    очищает guest dest (кроме nested mount points, prune'нутых через `-path X -prune`).
+27. **Go toolchain в bootstrap**: apt `golang-go` = Go 1.19, слишком стар для
+    tg v3 (требует go 1.26). Ставим Go 1.26.5 из go.dev в `extra_shell`
+    (`curl ... | tar -C /usr/local`). `go.dev`+`dl.google.com` в allowlist.
+28. **tg v3 plugin download race**: см. баг выше (#race-исправлен). EOF на
+    `astg-skills.tar.gz` — не сеть/файл/allowlist (md5 через curl совпадает), а
+    race в `downloadWithProgress` (tg возвращает до flush файла). Патч в
+    `test-todo2/custom-skills/tg-patch/`.
+29. **GCS-only Go modules**: `cloudflare/circl` (через go-git) отдаётся только с
+    `storage.googleapis.com`, не из `proxy.golang.org`. Без него `go install tg`
+    падает `lookup storage.googleapis.com: no such host`. Добавить в allowlist.
 
 ## CLI команды (полный список)
 
