@@ -27,6 +27,7 @@ Load 1-3 modules based on your current task. Do not load all modules.
 | HTTP endpoint design, request/response shapes, status     | api-contract-rules.md| overlay    |
 | Writing tests (table-driven, persistence-reopen)          | tdd-rules.md         | overlay    |
 | Security checks, pre-QA transition                        | security-checks.md   | overlay    |
+| Sync VM↔host work, pulling remote, exposing loki result    | git-sync.md          | overlay    |
 | Model / tool selection                                    | model-selection.md   | loki built-in |
 | Code review, quality checks                               | quality-gates.md     | loki built-in |
 | Debugging, errors, failures                               | troubleshooting.md   | loki built-in |
@@ -55,6 +56,14 @@ RED-GREEN-REFACTOR на `go test`. Table-driven, реальный SQLite (без
 ### security-checks.md
 Когда: фаза DEVELOPMENT, перед переходом в QA.
 Security-скан изменившихся файлов, блокировка перехода при HIGH-находках.
+
+### git-sync.md
+Когда: **перед первым git-коммитом в VM** и при любой синхронизации с host/remote.
+Единственный правильный способ обмена файлами между VM, общим remote и host: VM
+клонирует remote в `/workspace` (shared history → loki переиспользует, не делает
+`git init`), коммитит на ветку `vm/<sandbox-name>`, локальный git-daemon :9418
+(read-only) отдаёт результат loki наружу для host. Branching-стратегия для
+single-VM с заделом на multi-VM. Никогда не пушить в remote из VM.
 
 ## How to Load
 1. Read this index.

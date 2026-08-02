@@ -225,6 +225,20 @@ sandbox:
           if [ -e "$src" ]; then cp -a "$src" "$tgt"; fi
         done
         chown -R loki:loki /home/loki/.tg /home/loki/.agents 2>/dev/null || true
+
+        # --- git-daemon: read-only server exposing /workspace on :9418 ---
+        # Lets the host pull loki's work (vm/<sandbox> branch) without msb cp:
+        #   git fetch git://localhost:9418/ vm/<name>   (run on the host)
+        # --export-all: serve repos without a git-daemon-export-ok marker.
+        # --listen=0.0.0.0: REQUIRED — msb port-forward reaches the VM on eth0,
+        #   not loopback; binding 127.0.0.1 makes the daemon look up but every
+        #   host fetch hangs (same lesson as the notes-API on :8000).
+        # Started as loki (owns /workspace); harmless if /workspace is not yet a repo.
+        runuser -u loki -- bash -c '
+          cd /workspace 2>/dev/null || exit 0
+          nohup git daemon --reuseaddr --base-path=/workspace --export-all \
+                   --listen=0.0.0.0 --port=9418 >/tmp/git-daemon.log 2>&1 &
+        ' || true
     snapshot:
       # --- APPLY mode (active): boot from the pre-built snapshot ---
       from_snapshot: mcd-base
@@ -241,3 +255,19 @@ sandbox:
 
   ports:
     - "8000:8000"                    # notes-API будет слушать тут
+    - "9418:9418"                    # git-daemon (read-only): host pulls loki result via git://localhost:9418/
+
+  # --- git-sync env: injected into the VM via msb -e (resolved host-side, never
+  #     inlined). The git-sync.md skill reads these. Leave SYNC_REMOTE_URL empty
+  #     to disable sync (loki falls back to its local repo). Set on the host:
+  #       export SYNC_REMOTE_URL=https://github.com/<org>/<repo>.git
+  #       export SYNC_REMOTE_TOKEN=ghp_...        # HTTPS PAT (empty for ssh://)
+  #       export SYNC_SSH_KEY=                    # ssh:// key path (empty for https)
+  #       export SYNC_BRANCH=main
+  #     For an internal SSH git server, also allowlist its host:port below.
+  env:
+    SYNC_REMOTE_URL: "${SYNC_REMOTE_URL}"
+    SYNC_REMOTE_TOKEN: "${SYNC_REMOTE_TOKEN}"
+    SYNC_SSH_KEY: "${SYNC_SSH_KEY}"
+    SYNC_BRANCH: "${SYNC_BRANCH}"
+    SANDBOX_NAME: "${SANDBOX_NAME}"
