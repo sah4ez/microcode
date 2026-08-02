@@ -33,9 +33,9 @@ async function fetchJSON(url, options = {}) {
   return body;
 }
 
-function asJSON(data) {
+function asJSON(method, data) {
   return {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   };
@@ -124,7 +124,7 @@ async function refresh() {
 }
 
 async function createTodo(title, description) {
-  await fetchJSON("/todos", asJSON({ title, description }));
+  await fetchJSON("/todos", asJSON("POST", { title, description }));
   await refresh();
 }
 
@@ -139,7 +139,7 @@ async function deleteTodo(id) {
 }
 
 async function patchTodo(id, title, description) {
-  await fetchJSON(`/todos/${id}`, asJSON({ title, description }));
+  await fetchJSON(`/todos/${id}`, asJSON("PATCH", { title, description }));
   await refresh();
 }
 

@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"log/slog"
 	"os"
@@ -23,6 +24,13 @@ import (
 	"github.com/loki/todoservice/internal/transport"
 	"github.com/loki/todoservice/internal/web"
 )
+
+// staticFS embeds the web UI (static/index.html, app.js, styles.css) into the
+// binary so the service ships as a single self-contained artifact. web.Register
+// serves these three files from this embed.FS on the same fiber app as the API.
+//
+//go:embed static/*
+var staticFS embed.FS
 
 const (
 	dataDir = "./data"
