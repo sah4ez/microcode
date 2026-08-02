@@ -1,0 +1,15 @@
+# Runtime data (SQLite db + WAL/SHM sidecars) — auto-created on startup
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+/vendor/
+
+# Local build output / scratch binaries
+/bin/
+/.bin/
+
+# Tooling scratch
+.tg/

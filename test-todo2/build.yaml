@@ -71,6 +71,11 @@ loki:
   max_iterations: 15
   max_budget_usd: 5.0
   effort: standard                   # 6 фаз SDLC (без DEEPEN_PLAN можно low)
+  # dashboard отключён: он ставит fastapi/uvicorn/sqlalchemy/aiosqlite из PyPI,
+  # а pypi.org/files.pythonhosted.org нужно добавлять в allowlist + пересобирать
+  # snapshot. RARV-цикл идёт и без web-UI; прогресс — `microcode status`.
+  # Чтобы включить: раскомментировать + добавить pypi-хосты в allowlist + build.
+  dashboard: false
   sdk_mode: full
   quality_gates:
     enabled: true
@@ -117,6 +122,10 @@ sandbox:
       # npm (node, loki-mode, cline, @cline/core)
       - { action: allow, target: registry.npmjs.org, proto: tcp, port: 443 }
       - { action: allow, target: bun.sh, proto: tcp, port: 443 }
+      # PyPI (loki dashboard ставит fastapi/uvicorn/sqlalchemy/aiosqlite в venv;
+      # без этих хостов pip падает "No matching distribution found for fastapi")
+      - { action: allow, target: pypi.org, proto: tcp, port: 443 }
+      - { action: allow, target: files.pythonhosted.org, proto: tcp, port: 443 }
       # GitHub (skillkit тянет obra/superpowers; git clone)
       - { action: allow, target: github.com, proto: tcp, port: 443 }
       - { action: allow, target: codeload.github.com, proto: tcp, port: 443 }
@@ -217,12 +226,10 @@ sandbox:
         done
         chown -R loki:loki /home/loki/.tg /home/loki/.agents 2>/dev/null || true
     snapshot:
-      # --- BUILD mode (active): recapture snapshot with Go 1.26 + tg v3 + tgp-go ---
-      #     run `microcode build test-todo2/build.yaml`, then flip back to
-      #     from_snapshot for fast applies.
-      enabled: true
-      # --- APPLY mode: boot from the pre-built snapshot (re-enable after build) ---
-      # from_snapshot: mcd-base
+      # --- APPLY mode (active): boot from the pre-built snapshot ---
+      from_snapshot: mcd-base
+      # --- BUILD mode: set enabled: true (and comment from_snapshot) to recapture ---
+      # enabled: true
       name: mcd-base
 
   mounts:

@@ -39,11 +39,18 @@
 - Всё запушено в `origin/master` (github.com:sah4ez/microcode.git), последний
   коммит `6115ee7`.
 
-## test-todo2: Go+tg v3 рефакторинг (в работе, 2026-08-01)
+## test-todo2: Go+tg v3 рефакторинг (ГОТОВО, 2026-08-02)
 
 Цель: через `microcode apply test-todo2/build.yaml --prd src/PRD-001.md`
 рефакторить Python todo-сервис в **Go + github.com/seniorGolang/tg/v3 +
-go-fiber + SQLite** (`modernc.org/sqlite`, pure Go). Найдены и решены:
+go-fiber + SQLite** (`modernc.org/sqlite`, pure Go). **ДОСТИГНУТО** — loki
+построил сервис через обязательный tg v3 codegen. Все Definition of Done
+из PRD-001 зелёные: `go mod tidy`/`go vet`/`go test ./...` ✅, `internal/transport`
+сгенерирован `tg server` (17 файлов) ✅, `github.com/seniorGolang/tg/v3 v3.0.5` в
+go.mod ✅, curl examples работают (POST→201, GET→200) ✅, `./data/todos.db`
+переживает рестарт (доказано: todo "persist me across restart" выжил) ✅.
+Код в `test-todo2/src/`. Коммит в VM `c672aa8 feat: todo service on tg v3
+(generated fiber transport) + SQLite`. Найдены и решены:
 
 - **tg v3 != v2**: v3 module `github.com/seniorGolang/tg/v3` (tag v3.0.5),
   требует **go 1.26** (apt даёт лишь 1.19 — ставим Go 1.26.5 из go.dev в
