@@ -15,9 +15,22 @@ The ``loki start`` invocation is emitted by the loki runner, not here.
 from __future__ import annotations
 
 from microcode.generators.base import GeneratedArtifact, GenerationResult
-from microcode.manifest import PlatformManifest
+from microcode.manifest import PlatformManifest, SandboxConfig
 from microcode import config
 from microcode.generators.net import network_argv
+
+
+def _active_mounts(s: SandboxConfig):
+    """Mounts to actually emit as bind/volume flags.
+
+    When ``sync`` is enabled, the sync destination (default /workspace) is
+    populated by ``git clone`` instead of a bind mount / named-volume seed, so
+    we suppress the mount entry whose ``dest`` matches ``sync.dest``. All other
+    mounts (e.g. /workspace/skills) are unaffected.
+    """
+    if s.sync.enabled:
+        return [mt for mt in s.mounts if mt.dest != s.sync.dest]
+    return list(s.mounts)
 
 
 def _create_argv(m: PlatformManifest, bootstrap_guest: str) -> list[str]:
@@ -56,8 +69,8 @@ def _create_argv(m: PlatformManifest, bootstrap_guest: str) -> list[str]:
         if not already:
             argv += ["-v", f"{st.volume}:{st.dest}"]
 
-    # bind mounts
-    for mt in s.mounts:
+    # bind mounts (sync.dest is suppressed when sync clones into it instead)
+    for mt in _active_mounts(s):
         spec = f"{mt.host}:{mt.dest}"
         if mt.readonly:
             spec += ":ro"
@@ -160,7 +173,8 @@ def _from_snapshot_argv(m: PlatformManifest) -> list[str]:
     # bind mounts: msb does NOT support bind mounts with --from-snapshot
     # ("mount: Not a directory"). Convert each to a NAMED VOLUME and seed it
     # via `msb cp` in the runner. Volume name is derived from the dest path.
-    for mt in s.mounts:
+    # sync.dest is suppressed — it is populated by `git clone` instead.
+    for mt in _active_mounts(s):
         vol_name = _bind_to_volume_name(mt.dest)
         argv += ["-v", f"{vol_name}:{mt.dest}"]
 

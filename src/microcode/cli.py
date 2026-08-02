@@ -181,6 +181,18 @@ def build(
             plan.sandbox_commands, dry_run=dry_run
         )
 
+        # When sync is enabled, the workspace mount is suppressed and the VM has
+        # no /workspace content yet — clone the remote now (before the snapshot
+        # is captured, so the snapshot includes the cloned workspace).
+        if not dry_run and plan.clone_commands:
+            from microcode.runners import SkillkitRunner
+            logging_utils.step(f"Cloning workspace from sync remote")
+            SkillkitRunner(cwd=str(root)).run(plan.clone_commands, dry_run=dry_run)
+            SkillkitRunner(cwd=str(root)).run([[
+                "msb", "exec", m.sandbox.name, "--user", "root", "--",
+                "chown", "-R", "loki:loki", m.sandbox.sync.dest,
+            ]], dry_run=dry_run)
+
         if dry_run:
             logging_utils.warn("dry-run: nothing was executed")
         else:

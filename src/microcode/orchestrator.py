@@ -121,6 +121,23 @@ def apply(
         plan.sandbox_commands, dry_run=dry_run
     )
 
+    # When sync (git clone) is enabled, the workspace is populated by cloning the
+    # remote — replacing BOTH the bind mount (build) and the tar-seed (apply).
+    # Run the clone now, then chown so loki can write. Skip the tar-seed block
+    # below entirely (the sync.dest mount was already suppressed in the argv).
+    if not dry_run and m.sandbox.sync.enabled and plan.clone_commands:
+        logging_utils.step(f"Cloning workspace from {m.sandbox.sync.remote_url}")
+        runner = SkillkitRunner(cwd=str(root))
+        try:
+            runner.run(plan.clone_commands)
+            # chown the cloned dest so the unprivileged loki user can write
+            runner.run([[
+                "msb", "exec", m.sandbox.name, "--user", "root", "--",
+                "chown", "-R", "loki:loki", m.sandbox.sync.dest,
+            ]])
+        except RunnerError as e:
+            logging_utils.warn(f"git clone for sync failed: {e}")
+
     # When booting from a snapshot, bind mounts become named volumes (msb can't
     # bind-mount with --from-snapshot). Seed each volume from its host dir so the
     # VM sees the same files as a normal bind mount would.
@@ -134,7 +151,11 @@ def apply(
     # Named volumes also PERSIST across applies (a real bind mount always shows
     # the current host state), so we clear the guest dest first — sparing any
     # nested mount points (other volumes mounted under this path).
-    if not dry_run and m.sandbox.init.snapshot.from_snapshot:
+    #
+    # SKIPPED when sync is enabled: the sync.dest mount is suppressed and the
+    # workspace was cloned above. Other mounts (e.g. /workspace/skills) are still
+    # seeded here.
+    elif not dry_run and m.sandbox.init.snapshot.from_snapshot:
         from microcode.generators.sandbox import from_snapshot_mount_map
         from pathlib import Path as _P
         import os as _os
@@ -262,6 +283,7 @@ def dump_plan(plan: Plan, path: Path) -> None:
         "artifacts": [{"name": a.name} for a in plan.artifacts],
         "skillkit_commands": plan.skillkit_commands,
         "sandbox_commands": plan.sandbox_commands,
+        "clone_commands": plan.clone_commands,
         "loki_command": plan.loki_command,
         "notes": plan.notes,
         "prd": plan.prd,

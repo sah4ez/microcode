@@ -77,3 +77,19 @@ sandbox:
       name: mcd-base
   mounts:
     - { host: ./src, dest: /workspace, readonly: false }
+  # Git-clone workspace provisioning (replaces the bind mount above for
+  # /workspace when enabled). The VM clones this remote instead of mounting
+  # ./src, giving it shared git history — loki commits on a vm/<sandbox>
+  # branch and the host can fetch+merge normally. The ./src mount is
+  # suppressed automatically for sync.dest. Credentials come from the host
+  # environment (token_env / ssh_key_env), never inlined.
+  # sync:
+  #   enabled: true
+  #   remote_url: https://github.com/<org>/<repo>.git
+  #   branch: main
+  #   dest: /workspace
+  #   auth:
+  #     method: https              # or "ssh"
+  #     token_env: GH_TOKEN        # https: host env var with PAT
+  #     # ssh_key_env: SYNC_SSH_KEY  # ssh: host env var with key PATH
+  #   depth: 1                    # shallow clone (0 = full history)

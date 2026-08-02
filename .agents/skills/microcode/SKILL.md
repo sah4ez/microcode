@@ -92,16 +92,24 @@ port look open but every host request gets an empty reply (curl exit 52 /
 `ERR_EMPTY_RESPONSE`). Always bind `0.0.0.0:PORT`. This applies to the app,
 the git-daemon, and the loki dashboard alike.
 
-## Host↔VM sync: two approaches
+## Host↔VM sync: three approaches
 
-1. **msb cp** (default, one-shot) — copy files host↔VM. Fine for seeding; bad
-   for iterative work (no live sync). Use the tar workaround above for dirs.
-2. **git-daemon** (live, for iterative dev) — run a read-only `git daemon` in
-   the VM on a forwarded port; the host fetches loki's commits via git.
-   See `references/git-sync.md` for the topology, branching model, and setup.
+1. **`sandbox.sync` (git clone, recommended)** — when `sync.enabled: true`,
+   microcode clones the remote into the workspace during build/apply, replacing
+   the bind mount / tar-seed. The `./src` mount for `sync.dest` is suppressed
+   automatically; the git host is auto-allowlisted for egress. Loki gets shared
+   git history and commits on a `vm/<sandbox>` branch the host can fetch+merge.
+   Credentials via `auth.token_env`/`ssh_key_env` (host env, never inlined).
+2. **msb cp** (default one-shot, when sync is off) — copy files host↔VM. Fine
+   for seeding; bad for iterative work (no live sync). Use the tar workaround
+   above for dirs.
+3. **git-daemon** (live pull of loki's result) — run a read-only `git daemon`
+   in the VM on a forwarded port; the host fetches loki's commits via git.
+   Complements `sandbox.sync` (clone gives the VM the codebase IN; the daemon
+   lets the host pull loki's work OUT). See `references/git-sync.md`.
 
-Prefer git-daemon when you need to pull loki's result back to the host
-repeatedly; prefer `msb cp` for a one-time seed.
+Prefer `sandbox.sync` for the codebase-in direction; add the git-daemon when
+you also need to pull loki's result back repeatedly.
 
 ## Secrets: never inline, always ${VAR}
 

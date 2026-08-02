@@ -17,6 +17,7 @@ from microcode.generators import (
     generate_loki,
     generate_sandbox,
     generate_skills,
+    generate_sync,
 )
 from microcode.manifest import PlatformManifest
 
@@ -33,12 +34,16 @@ class Plan:
     # ordered command groups; each is executed by one runner
     skillkit_commands: list[list[str]] = field(default_factory=list)
     sandbox_commands: list[list[str]] = field(default_factory=list)
+    # git clone commands — run after boot when sandbox.sync is enabled, replacing
+    # the bind mount (build) / tar-seed (apply) for the sync.dest workspace.
+    clone_commands: list[list[str]] = field(default_factory=list)
     loki_command: list[str] | None = None
     notes: list[str] = field(default_factory=list)
     prd: str | None = None
 
     def all_commands(self) -> list[list[str]]:
         out: list[list[str]] = [*self.skillkit_commands, *self.sandbox_commands]
+        out.extend(self.clone_commands)
         if self.loki_command:
             out.append(self.loki_command)
         return out
@@ -49,6 +54,7 @@ def build_plan(m: PlatformManifest, prd: str | None = None) -> Plan:
     loki = generate_loki(m)
     bootstrap = generate_bootstrap(m)
     sandbox = generate_sandbox(m)
+    sync = generate_sync(m)
 
     artifacts = [
         *skills.artifacts,
@@ -56,7 +62,7 @@ def build_plan(m: PlatformManifest, prd: str | None = None) -> Plan:
         *bootstrap.artifacts,
     ]
 
-    notes = [*skills.notes, *sandbox.notes]
+    notes = [*skills.notes, *sandbox.notes, *sync.notes]
     # Run loki as the unprivileged 'loki' user (created by bootstrap) so
     # claude/cline accept --dangerously-skip-permissions (refused under root).
     # Set PATH/HOME explicitly — a non-root login shell may not source the
@@ -84,6 +90,7 @@ def build_plan(m: PlatformManifest, prd: str | None = None) -> Plan:
         artifacts=artifacts,
         skillkit_commands=skills.commands,
         sandbox_commands=sandbox.commands,
+        clone_commands=sync.commands,
         loki_command=loki_cmd,
         notes=notes,
         prd=prd,

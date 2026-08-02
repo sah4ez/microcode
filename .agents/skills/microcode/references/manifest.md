@@ -51,6 +51,8 @@ sandbox:
     - { host: ./src, dest: /workspace, readonly: false }
     # NOTE: with from_snapshot these become NAMED VOLUMES (msb can't bind-mount).
     # They are seeded via msb cp on each apply; they do NOT sync live.
+    # When sync.enabled=true, the mount whose dest == sync.dest (default
+    # /workspace) is SUPPRESSED — the workspace is git-cloned instead.
 
   ports:
     - "8000:8000"                  # host:guest — service must bind 0.0.0.0
@@ -58,11 +60,27 @@ sandbox:
 
   env:
     MY_TOKEN: "${MY_TOKEN}"        # ${VAR} resolved host-side via expand_env
-    SYNC_REMOTE_URL: "${SYNC_REMOTE_URL}"
 
   secrets:
     - env: CLINE_API_KEY           # host env var name (value never inlined)
       allow_hosts: [api.z.ai]      # egress scoping
+
+  # Git-clone workspace provisioning. When enabled, the workspace (dest) is
+  # populated by `git clone` from remote_url instead of mounting ./src (build)
+  # or copying it via tar+msb cp (apply). Gives the VM shared git history so
+  # loki commits on a vm/<sandbox> branch the host can fetch+merge. Credentials
+  # come from the host env (token_env/ssh_key_env), never inlined. The git host
+  # is auto-allowlisted for egress (no manual allowlist entry needed).
+  sync:
+    enabled: false                 # set true + remote_url to activate
+    # remote_url: https://github.com/<org>/<repo>.git
+    # branch: main
+    # dest: /workspace
+    # auth:
+    #   method: https              # or "ssh"
+    #   token_env: GH_TOKEN        # https: host env var with PAT
+    #   # ssh_key_env: SYNC_SSH_KEY  # ssh: host env var with key PATH
+    # depth: 1                    # shallow clone (0 = full history)
 ```
 
 ### network modes

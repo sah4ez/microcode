@@ -480,6 +480,55 @@ class MountRef(BaseModel):
     readonly: bool = False
 
 
+class SyncAuth(BaseModel):
+    """How the VM authenticates to the sync git remote.
+
+    Credentials are referenced by host env-var NAME (resolved host-side via
+    expand_env) — the value never enters the manifest.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["https", "ssh"] = "https"
+    # HTTPS: host env var holding the personal access token (PAT).
+    token_env: str | None = None
+    # SSH: host env var holding the PATH to the private key.
+    ssh_key_env: str | None = None
+
+
+class SyncConfig(BaseModel):
+    """Git-clone-based workspace provisioning (replaces bind-mount / tar-seed).
+
+    When enabled, the workspace (``dest``) is populated by ``git clone`` from
+    ``remote_url`` instead of mounting ``./src`` (build) or copying it via
+    tar+msb cp (apply). This gives the VM a clone with shared history, so loki
+    commits on top of it and the host can fetch+merge normally.
+
+    Credentials come from the host environment via ``auth`` (never inlined).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    remote_url: str = Field(default="", description="git remote URL (https:// or ssh://)")
+    branch: str = Field(default="main", description="base branch to clone")
+    dest: str = Field(default="/workspace", description="guest path cloned into")
+    auth: SyncAuth | None = None
+    depth: int = Field(default=1, description="shallow clone depth; 0 = full history")
+
+    @model_validator(mode="after")
+    def _check_enabled(self) -> "SyncConfig":
+        if self.enabled and not self.remote_url:
+            raise ValueError("sync.enabled=true requires sync.remote_url")
+        if self.auth is not None:
+            if self.auth.method == "https" and not self.auth.token_env:
+                # recommended, not hard-required (public repos need no token)
+                pass
+            if self.auth.method == "ssh" and not self.auth.ssh_key_env:
+                pass
+        return self
+
+
 class SandboxConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -503,6 +552,7 @@ class SandboxConfig(BaseModel):
     secrets: list[SecretRef] = Field(default_factory=list)
     volumes: list[VolumeRef] = Field(default_factory=list)
     mounts: list[MountRef] = Field(default_factory=list)
+    sync: SyncConfig = Field(default_factory=SyncConfig)
     ports: list[str] = Field(
         default_factory=lambda: ["57374:57374"], description="host:guest"
     )

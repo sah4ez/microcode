@@ -49,20 +49,30 @@ that shared history and commits on top — the host can fetch+merge normally.
 | `main`          | host (remote)| base branch; VM only fetches, never commits.    |
 | `vm/<sandbox>`  | VM (loki)    | this VM's work; unique per sandbox → multi-VM safe. |
 
-## Manifest setup
+## Manifest setup (structured sandbox.sync)
+
+microcode clones the remote for you when `sandbox.sync` is enabled — no manual
+clone step. The `./src` mount for `sync.dest` is suppressed automatically.
 
 ```yaml
 sandbox:
   ports:
     - "8000:8000"
     - "9418:9418"                    # git-daemon (read-only for host)
-  env:
-    SYNC_REMOTE_URL: "${SYNC_REMOTE_URL}"     # resolved host-side, never inlined
-    SYNC_REMOTE_TOKEN: "${SYNC_REMOTE_TOKEN}" # HTTPS PAT (empty for ssh://)
-    SYNC_SSH_KEY: "${SYNC_SSH_KEY}"           # ssh:// key path (empty for https)
-    SYNC_BRANCH: "${SYNC_BRANCH}"             # base branch (main)
-    SANDBOX_NAME: "${SANDBOX_NAME}"
+  sync:
+    enabled: true
+    remote_url: https://github.com/<org>/<repo>.git
+    branch: main
+    dest: /workspace
+    auth:
+      method: https                 # or "ssh"
+      token_env: GH_TOKEN           # https: host env var with PAT
+      # ssh_key_env: SYNC_SSH_KEY   # ssh: host env var with key PATH
+    depth: 1                        # shallow clone (0 = full history)
 ```
+
+The git host is **auto-allowlisted** for egress (tcp/443 for https, tcp/22 or
+the URL port for ssh) — no manual `network.allow` entry needed.
 
 The git-daemon start (in `extra_shell`, runs as loki which owns /workspace):
 
@@ -81,21 +91,21 @@ Flags that matter:
   loopback. A 127.0.0.1 bind makes the daemon look up but host fetch hangs.
 - `--base-path=/workspace` — serve repos under /workspace by relative path.
 
-## Host setup (export before apply)
+## Host setup (export the credential env vars before apply)
+
+The manifest references credentials by env-var NAME (`token_env` / `ssh_key_env`);
+export the actual values on the host before `microcode apply`/`build`:
 
 ```bash
-# HTTPS (private GitHub):
-export SYNC_REMOTE_URL=https://github.com/<org>/<repo>.git
-export SYNC_REMOTE_TOKEN=ghp_xxx           # PAT with read access
-export SYNC_BRANCH=main
+# HTTPS (private GitHub) — matches auth.token_env: GH_TOKEN:
+export GH_TOKEN=ghp_xxx             # PAT with read access
 
-# OR internal SSH server (also allowlist its host:port in network):
-export SYNC_REMOTE_URL=ssh://git@git.internal:2222/repo.git
+# OR internal SSH server — matches auth.ssh_key_env: SYNC_SSH_KEY:
 export SYNC_SSH_KEY=/path/to/id_ed25519
-export SYNC_BRANCH=main
 ```
 
-Leave `SYNC_REMOTE_URL` empty to disable sync (loki uses its local repo).
+Leave `sync.enabled: false` (the default) to disable sync entirely — the VM
+uses the bind mount (build) / tar-seed (apply) as before.
 
 ## Pulling loki's result onto the host
 
