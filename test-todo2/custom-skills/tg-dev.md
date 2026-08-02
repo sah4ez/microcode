@@ -226,10 +226,16 @@ func main() {
     repo := sqlite.New(db)
     svc  := service.New(repo)
     srv  := transport.New( /* options incl. transport.NewService(svc) */ )
-    go srv.Fiber().Listen(":8000")
+    go srv.Fiber().Listen("0.0.0.0:8000")
     <-blockForever()
 }
 ```
+
+**Listen address is `0.0.0.0:8000`, NEVER `127.0.0.1:8000`.** The service runs
+inside a microsandbox VM; the host reaches it via msb port-forwarding, which
+arrives on the VM's `eth0` (not loopback). Binding to `127.0.0.1` makes the port
+map look open but every host request gets an empty reply (curl exit 52).
+`0.0.0.0` binds all interfaces so port-forward works. This is a hard rule.
 
 ## Verification gate (this module feeds loki's VERIFY phase)
 

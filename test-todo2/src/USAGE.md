@@ -7,7 +7,8 @@
   (`tg pkg list`). The environment's `tg pkg add` needs the download-race patch
   in `skills/tg-patch/`; a working patched binary is at `/home/loki/bin/tg`.
 - No external services (no database server). SQLite is an embedded file.
-- Port `8000` on `127.0.0.1` must be free.
+- Port `8000` must be free. The server **binds `0.0.0.0:8000`** (all interfaces)
+  so msb port-forwarding works; clients connect to `http://127.0.0.1:8000`.
 - Env: Go module proxy. The `github.com/seniorGolang/tg/v3` module is not on the
   public Go proxy, so use a direct fallback:
   `go env -w GOPROXY=https://proxy.golang.org,direct GOSUMDB=off`.

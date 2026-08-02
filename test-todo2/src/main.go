@@ -3,7 +3,7 @@
 // The HTTP transport is GENERATED from the @tg contract in contracts/ by
 // `tg server -o internal/transport` (github.com/seniorGolang/tg/v3 + go-fiber).
 // This file only wires the generated transport to the hand-written service and
-// SQLite repository, then serves on 127.0.0.1:8000 with graceful shutdown.
+// SQLite repository, then serves on 0.0.0.0:8000 with graceful shutdown.
 package main
 
 import (
@@ -26,7 +26,7 @@ import (
 const (
 	dataDir = "./data"
 	dbPath  = "./data/todos.db"
-	addr    = "127.0.0.1:8000"
+	addr    = "0.0.0.0:8000"
 )
 
 func main() {
