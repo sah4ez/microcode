@@ -79,6 +79,17 @@ go.mod ✅, curl examples работают (POST→201, GET→200) ✅, `./data/
   **Доказано**: после патча оба плагина (astg + server v1.0.8) ставятся, и
   `tg server -o transport` генерит полный fiber-транспорт (15+ файлов) из
   `// @tg` контракта.
+- **#30 tools.go: НЕ импортировать `tg/v3/skills`** (2026-08-02, коммит `3464220`):
+  loki написал `tools.go` с blank-import `_ "github.com/seniorGolang/tg/v3/skills"`
+  для пиннинга версии тулчейна. Но пакет `skills` **не существует** в v3.0.5
+  (там только `cmd/tg`). Это ломало `go mod tidy` → неполный `go.sum` →
+  `go vet` падал с checksum mismatch / missing go.sum entries, что блокировало
+  весь VERIFY. Фикс: импортировать `github.com/seniorGolang/tg/v3/cmd/tg`
+  (единственный importable пакет), регенерировать `go.mod`+`go.sum` через
+  `GONOSUMDB=off GONOSUMCHECK=* GOPROXY=https://proxy.golang.org,direct go mod
+  tidy` (proxy.golang.org работает; GOPROXY=direct падает на gnutls TLS).
+  Добавлено Never-правило в `tg-dev.md`. После фикса: vet/test зелёные,
+  сервис собирается и отвечает (POST 201 / GET 200).
 
 ## Steer — рабочий pattern (ДОКАЗАНО)
 
