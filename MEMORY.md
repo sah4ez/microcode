@@ -33,11 +33,16 @@
 - **Loki dashboard доступен** на http://localhost:57374 (live RARV прогресс,
   Lab tab для постановки задач). Нужен `--host 0.0.0.0` + fastapi/uvicorn.
 - **Todo-app доступен** на http://localhost:8000 (UI с оранжевыми карточками для priority).
-- **Тесты: 85/85 зелёные.**
+- **Тесты: 105/105 зелёные** (85 базовых + 20 для sandbox.sync git-clone).
 - 7 примеров валидны: minimal, allowlist, full-stack, skills-in-vm,
   cached-base, todo-api-cline, cline-multi-skills.
+- **`sandbox.sync` (git clone вместо bind-mount/seed)** — когда
+  `sandbox.sync.enabled: true`, microcode клонирует remote в workspace VM
+  (build и apply), подавляя mount для `sync.dest`. Auto-egress git-хоста,
+  credentials через `auth.token_env`/`ssh_key_env` (host env, не инлайн).
+  Коммит `9c4f5a7`.
 - Всё запушено в `origin/master` (github.com:sah4ez/microcode.git), последний
-  коммит `6115ee7`.
+  коммит `9c4f5a7`.
 
 ## test-todo2: Go+tg v3 рефакторинг (ГОТОВО, 2026-08-02)
 
@@ -195,6 +200,37 @@ PATH.
     `storage.googleapis.com`, не из `proxy.golang.org`. Без него `go install tg`
     падает `lookup storage.googleapis.com: no such host`. Добавить в allowlist.
 
+## Host↔VM sync — git-based синхронизация (коммиты `4d4abcb`, `9c4f5a7`)
+
+Проблема: named volumes (from_snapshot) не синхронизируются live с хостом →
+нужен ручной `msb cp`. Решение — **git как sync-механизм** через общий remote
++ локальный git-daemon в VM.
+
+**Топология:**
+```
+host push→remote (правки) / pull←remote (база) / pull←VM:9418 (результат loki)
+VM  pull←remote (read-only, никогда не пушит) + git-daemon :9418 (read-only для host)
+```
+
+**Три слоя (все реализованы):**
+1. **`sandbox.sync` (clone IN, коммит `9c4f5a7`)** — microcode клонирует remote
+   в `/workspace` при build/apply. Mount подавлен, auto-egress, credentials
+   через env. Loki получает shared history → коммитит на `vm/<sandbox>`.
+2. **git-daemon (pull OUT, коммит `4d4abcb`)** — read-only `git daemon` в VM на
+   `:9418` (`--export-all --listen=0.0.0.0`), host забирает результат loki:
+   `git fetch git://localhost:9418/ vm/<name>`. Без `msb cp`. Доказано end-to-end.
+3. **git-sync.md skill (коммит `4d4abcb`)** — loki-facing навык в
+   `test-todo2/custom-skills/`: branching-стратегия (`main` read-only в VM,
+   `vm/<sandbox>` рабочая), процедура (clone/checkout/daemon/pull/checkpoint),
+   verification gate, Never-блок.
+
+**Ключевой факт:** loki пропускает `git init` если `/workspace` уже репозиторий
+(`loki-mode run.sh:7115`). Поэтому clone ДО старта loki → loki переиспользует
+shared history, не делает disconnected init.
+
+**Документация:** `.agents/skills/microcode/references/git-sync.md` (topology,
+branching, host setup), `references/manifest.md` (sandbox.sync секция).
+
 ## CLI команды (полный список)
 
 | Команда | Что делает |
@@ -221,12 +257,13 @@ src/microcode/
 │   ├── net.py             # rule_token/network_argv/dns_argv (3 режима + DNS)
 │   ├── skills.py          # → .skills + skillkit cmds (in_vm wrapping, LOKI_AGENTS)
 │   ├── loki.py            # → loki-config.yaml + loki.env (model, phases, dashboard)
-│   └── sandbox.py         # → msb create/run/snapshot (from_snapshot→named volumes)
+│   ├── sandbox.py         # → msb create/run/snapshot (_active_mounts подавляет sync.dest)
+│   └── sync.py            # → git clone cmds + sync_egress_rules (sandbox.sync)
 ├── runners/
 │   ├── sandbox_runner.py  # resolve mounts→absolute, inject shim, ensure mount dirs
 │   └── loki_runner.py     # bash -lc, --user loki, -e secrets+CLINE_MODEL+LOKI_CLINE_MODEL, --api/--no-dashboard
-├── orchestrator.py        # apply (rm stale + purge hidden + from_snapshot cp+chown), destroy
-├── planner.py             # детерминированный Plan
+├── orchestrator.py        # apply (rm stale + purge hidden + sync clone ИЛИ from_snapshot cp+chown), destroy
+├── planner.py             # детерминированный Plan (sandbox/skillkit/clone/loki commands)
 ├── assets/cline-node-shim.cjs   # ★ node-shim cline через @cline/core (camelCase config)
 └── cli.py                 # typer: validate/plan/apply/build/snapshot/destroy/steer/status/rollback/show/doctor
 docs/extending-loki.md     # гайд: расширение/замена навыков + фазы SDLC
@@ -257,7 +294,31 @@ sandbox:
     enabled: true          # build: создать snapshot
     from_snapshot: mcd-base # apply: boot из snapshot
   ports: ["8000:8000", "57374:57374"]
+  sync:                   # git clone workspace (вместо bind-mount/seed)
+    enabled: false         # true + remote_url → активирует clone
+    # remote_url: https://github.com/o/r.git
+    # branch: main
+    # dest: /workspace     # mount для этого dest подавляется
+    # auth: {method: https|ssh, token_env, ssh_key_env}
+    # depth: 1             # shallow (0 = полная история)
 ```
+
+### sandbox.sync — git clone workspace (коммит `9c4f5a7`)
+Когда `sandbox.sync.enabled: true`:
+- **Build**: `git clone` remote → `/workspace` (bind-mount `./src` подавлен).
+- **Apply (from_snapshot)**: `git clone` remote → `/workspace` (tar-seed
+  пропускается; `elif` после clone-блока в orchestrator.apply).
+- Mount для `sync.dest` подавляется в обоих argv-builder'ах
+  (`_active_mounts` в `generators/sandbox.py`).
+- Clone в tempdir → clear dest (sparing nested mounts) → move `.git`+tree →
+  checkout `vm/<sandbox>` branch (shared history для loki).
+- **Auto-egress**: host из `remote_url` добавляется в allowlist (443 https /
+  22 ssh / URL-port) через `sync_egress_rules()` — ручной allowlist не нужен.
+- Credentials: `auth.token_env` (https PAT) / `auth.ssh_key_env` (ssh key
+  PATH) — резолвятся host-side через `expand_env`, **never inlined**.
+- Код: `generators/sync.py` (generate_sync, _clone_url, sync_egress_rules),
+  `planner.py` (Plan.clone_commands), `manifest.py` (SyncConfig/SyncAuth).
+- Fallback (sync disabled): build=bind-mount, apply=tar-seed (как раньше).
 
 ## Сеть провайдера (z.ai) — что работает
 
@@ -270,7 +331,11 @@ sandbox:
 
 - bootstrap на arm64 VM медленный (~20-30 мин). Snapshot (`microcode build`)
   решает — apply из snapshot занимает секунды.
-- from_snapshot НЕ поддерживает bind-mounts (msb 0.6.8) → named volumes + cp.
+- from_snapshot НЕ поддерживает bind-mounts (msb 0.6.8: `patches cannot be
+  combined with from_snapshot` / `mount: Not a directory`). **Два пути**:
+  (1) named volumes + tar-seed (по умолчанию, не live-sync); (2)
+  `sandbox.sync` — git clone remote вместо mount (live shared history, коммит
+  `9c4f5a7`). Для live-синхронизации результата loki ← host — git-daemon :9418.
 - loki dashboard требует fastapi/uvicorn (pip install, нужен pypi в allowlist).
 - snapshot от post-bootstrap VM иногда даёт `Read-only file system` при boot —
   баг msb 0.6.8 (msb 0.6.7 тоже). Workaround: named volumes вместо snapshot.
