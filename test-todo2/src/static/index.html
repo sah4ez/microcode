@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <main class="container">
+    <h1>Todos</h1>
+
+    <!-- Create form: title required, description optional -->
+    <form id="create-form" class="card">
+      <input id="title" name="title" type="text" placeholder="Title (required)" autocomplete="off" required />
+      <input id="description" name="description" type="text" placeholder="Description (optional)" autocomplete="off" />
+      <button type="submit">Add</button>
+    </form>
+
+    <p id="error" class="error" hidden></p>
+
+    <!-- Todo list -->
+    <ul id="todo-list" class="todo-list" aria-live="polite"></ul>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>

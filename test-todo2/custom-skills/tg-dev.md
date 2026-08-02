@@ -237,6 +237,48 @@ arrives on the VM's `eth0` (not loopback). Binding to `127.0.0.1` makes the port
 map look open but every host request gets an empty reply (curl exit 52).
 `0.0.0.0` binds all interfaces so port-forward works. This is a hard rule.
 
+## Serving the web UI (MANDATORY when the PRD requires a UI)
+
+This project MUST serve a vanilla-JS browser UI from the same process as the
+API. The generated transport owns a single `*fiber.App`; you add the UI on top
+of it — do NOT create a second HTTP server.
+
+```go
+srv := transport.New(log, transport.TodoService(svc))
+srv.TodoService().WithErrorHandler(service.HTTPError)
+
+// UI assets — register AFTER transport.New so the @tg contract routes
+// (/todos...) are matched first; the catch-all "/" and two asset paths
+// only handle what the API does not.
+app := srv.Fiber()
+app.Get("/", func(c *fiber.Ctx) error {
+    return c.SendFile("static/index.html")
+})
+app.Static("/styles.css", "./static/styles.css")
+app.Static("/app.js", "./static/app.js")
+```
+
+Layout:
+
+```
+static/
+  index.html   # the page: form + list, links /styles.css and /app.js
+  app.js       # vanilla JS: fetch /todos, render, create/toggle/edit/delete
+  styles.css   # minimal CSS, no external frameworks/CDN
+```
+
+Rules for the UI code:
+- The UI calls the REST API at `/todos` (no `/api` prefix). Endpoints:
+  `POST /todos`, `GET /todos`, `GET /todos/:id`, `PATCH /todos/:id`,
+  `DELETE /todos/:id`, `POST /todos/:id/toggle`.
+- Field names are the Go model's: `title`, `description`, `completed`,
+  `created_at` (NOT the old Python `body`/`done`).
+- `GET /todos` returns an envelope `{"todos":[...]}` — read `.todos`, do not
+  assume a bare array.
+- Toggle completion via `POST /todos/:id/toggle` (the contract method exists);
+  do not PATCH `completed` yourself.
+- No build step, no React/Vue, no CDN — plain HTML/JS/CSS committed in `static/`.
+
 ## Verification gate (this module feeds loki's VERIFY phase)
 
 Before declaring a feature done — **all of these must pass**, in order:
@@ -252,6 +294,10 @@ Before declaring a feature done — **all of these must pass**, in order:
   that closes + reopens the sqlite file and asserts data survived;
 - `go run main.go` boots and the curl examples in README return the documented
   status codes (see api-contract-rules.md).
+- **Web UI served**: `curl -s -o /dev/null -w '%{http_code}' http://0.0.0.0:8000/`
+  → 200, same for `/styles.css` and `/app.js`; `static/index.html`,
+  `static/app.js`, `static/styles.css` all exist. If the PRD requires a UI, this
+  is NOT optional.
 
 ## Never
 

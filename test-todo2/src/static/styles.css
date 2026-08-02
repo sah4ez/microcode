@@ -1,0 +1,153 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #e2e5ea;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --accent: #3b82f6;
+  --danger: #ef4444;
+  --done: #16a34a;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 1rem;
+}
+
+.card {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--card);
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+.card input[type="text"] {
+  flex: 1;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.card input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.9rem;
+  background: var(--accent);
+  color: #fff;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+button.secondary {
+  background: #e5e7eb;
+  color: var(--text);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.todo {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+}
+
+.todo-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.todo-head label {
+  cursor: pointer;
+  font-weight: 600;
+  flex: 1;
+}
+
+.todo.completed .todo-head label {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.todo-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.35rem 0;
+}
+
+.todo-desc {
+  margin: 0.25rem 0;
+  color: #374151;
+  white-space: pre-wrap;
+}
+
+.todo-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.edit-form input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+}
+
+.error {
+  color: var(--danger);
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  margin: 0 0 1rem;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 1rem 0;
+  text-align: center;
+}

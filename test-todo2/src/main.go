@@ -21,6 +21,7 @@ import (
 	"github.com/loki/todoservice/internal/service"
 	"github.com/loki/todoservice/internal/storage/sqlite"
 	"github.com/loki/todoservice/internal/transport"
+	"github.com/loki/todoservice/internal/web"
 )
 
 const (
@@ -75,6 +76,12 @@ func run(log *slog.Logger) error {
 	srv := transport.New(log, transport.TodoService(svc))
 	// Map domain errors to HTTP status codes with a sanitized body (no internals).
 	srv.TodoService().WithErrorHandler(service.HTTPError)
+
+	// Web UI: serve the vanilla-JS single page from the SAME fiber app that owns
+	// the generated transport (no second server). Registered AFTER the @tg
+	// contract routes so /todos... always wins and the three asset paths fall
+	// through to the static files.
+	web.Register(srv.Fiber(), staticFS)
 
 	// Serve until interrupted. Listen blocks, so run it in a goroutine and
 	// surface a startup failure via errCh.
