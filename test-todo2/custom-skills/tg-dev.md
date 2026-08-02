@@ -258,3 +258,8 @@ Before declaring a feature done — **all of these must pass**, in order:
 - Skip regenerating `internal/transport` after editing a `// @tg` interface.
 - Reach for CGO-backed `mattn/go-sqlite3` — use `modernc.org/sqlite`.
 - Put SQL in the service layer — it lives in `storage/sqlite` only.
+- **Import `github.com/seniorGolang/tg/v3/skills`** — that package does NOT exist
+  in v3.0.5 (only `cmd/tg` is importable). If you pin the toolchain version in a
+  build-tagged `tools.go`, import `github.com/seniorGolang/tg/v3/cmd/tg` — never
+  `.../skills`, `.../agent`, or other invented subpackages. After writing tools.go,
+  run `go mod tidy`; if it fails to resolve the import, the package does not exist.
