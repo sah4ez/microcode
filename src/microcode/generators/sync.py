@@ -74,12 +74,15 @@ def _clone_argv(m: PlatformManifest) -> list[str]:
     # Build the clone command. Clone to /tmp/ws-clone (empty target), then adopt
     # its .git + working tree into dest. Clear dest first (sparing nested mount
     # points like /workspace/skills) so the clone fully owns it.
+    # `set -e` aborts on any failure (e.g. wrong branch name, auth, network) so
+    # we don't cascade into mv/checkout on a half-cloned tree.
     depth_arg = f"{depth_flag} " if depth_flag else ""
     script = (
         f"set -e; "
         f"{ssh_prefix}"
         f"rm -rf /tmp/ws-clone && "
         f"git clone {depth_arg}--branch {branch} '{url}' /tmp/ws-clone && "
+        f"test -d /tmp/ws-clone/.git || {{ echo 'sync: clone failed (no .git)' >&2; exit 1; }} && "
         f"mkdir -p {dest} && "
         f"find {dest} -mindepth 1 -maxdepth 1 "
         f"-path {dest}/skills -prune -o -exec rm -rf {{}} + && "
@@ -87,10 +90,12 @@ def _clone_argv(m: PlatformManifest) -> list[str]:
         f"mv /tmp/ws-clone/* {dest}/ && "
         f"rmdir /tmp/ws-clone && "
         f"cd {dest} && "
-        f"git checkout -b vm/{sandbox_name} {branch} 2>/dev/null || git checkout vm/{sandbox_name} && "
+        # create/switch to the per-VM branch off the just-cloned branch (HEAD)
+        f"git checkout -b vm/{sandbox_name} 2>/dev/null || git checkout vm/{sandbox_name} && "
         f'git config user.name "Loki" && '
         f'git config user.email "loki@local" && '
-        f'echo "vm/{sandbox_name}" > {dest}/.loki/state/sync-branch.txt 2>/dev/null || true'
+        f'mkdir -p {dest}/.loki/state && '
+        f'echo "vm/{sandbox_name}" > {dest}/.loki/state/sync-branch.txt'
     )
     return [
         "msb", "exec", m.sandbox.name, "--user", "root", "--",

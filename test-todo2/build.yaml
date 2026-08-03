@@ -270,7 +270,7 @@ sandbox:
   sync:
     enabled: true
     remote_url: "https://github.com/sah4ez/microcode.git"
-    branch: main
+    branch: master
     dest: /workspace
     auth:
       method: https
