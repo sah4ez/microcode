@@ -250,24 +250,29 @@ sandbox:
     # (A) overlay скилл-модули loki — ДОПОЛНЯТ/ПЕРЕОПРЕДЕЛЯЮТ встроенные.
     #     loki читает /workspace/skills/00-index.md → грузит наши модули по фазе.
     - { host: ./custom-skills, dest: /workspace/skills, readonly: false }
-    # (B) рабочая директория — результат выполнения loki сохраняется на хосте.
+    # (B) рабочая директория ./src → /workspace ПОДАВЛЯЕТСЯ при sandbox.sync
+    #     (ниже): workspace клонируется из remote, а не bind-mount'ится.
+    #     Оставлено как fallback (когда sync.enabled=false).
     - { host: ./src, dest: /workspace, readonly: false }
 
   ports:
     - "8000:8000"                    # notes-API будет слушать тут
     - "9418:9418"                    # git-daemon (read-only): host pulls loki result via git://localhost:9418/
 
-  # --- git-sync env: injected into the VM via msb -e (resolved host-side, never
-  #     inlined). The git-sync.md skill reads these. Leave SYNC_REMOTE_URL empty
-  #     to disable sync (loki falls back to its local repo). Set on the host:
-  #       export SYNC_REMOTE_URL=https://github.com/<org>/<repo>.git
-  #       export SYNC_REMOTE_TOKEN=ghp_...        # HTTPS PAT (empty for ssh://)
-  #       export SYNC_SSH_KEY=                    # ssh:// key path (empty for https)
-  #       export SYNC_BRANCH=main
-  #     For an internal SSH git server, also allowlist its host:port below.
-  env:
-    SYNC_REMOTE_URL: "${SYNC_REMOTE_URL}"
-    SYNC_REMOTE_TOKEN: "${SYNC_REMOTE_TOKEN}"
-    SYNC_SSH_KEY: "${SYNC_SSH_KEY}"
-    SYNC_BRANCH: "${SYNC_BRANCH}"
-    SANDBOX_NAME: "${SANDBOX_NAME}"
+  # --- git-clone workspace provisioning: microcode клонирует remote в /workspace
+  #     при build/apply (вместо bind-mount ./src / tar-seed). Mount для
+  #     sync.dest (/workspace) подавляется автоматически; git-хост
+  #     auto-allowlisted для egress. Loki получает shared git history → коммитит
+  #     на vm/<sandbox>, host забирает через git-daemon :9418 или git fetch.
+  #     Credentials резолвятся host-side (never inlined). На хосте перед apply:
+  #       export GH_TOKEN=ghp_...        # PAT с read-доступом к репо
+  #     Remote = приватный форк microcode (или исходный sah4ez/microcode.git).
+  sync:
+    enabled: true
+    remote_url: "https://github.com/sah4ez/microcode.git"
+    branch: main
+    dest: /workspace
+    auth:
+      method: https
+      token_env: GH_TOKEN            # host env var с PAT (never inlined в манифест)
+    depth: 1                         # shallow clone (loki не нужна полная история)
