@@ -187,14 +187,18 @@ def apply(
 
             # (2) tar the host dir CONTENTS, msb cp the tarball, untar at the
             #     guest dest. COPYFILE_DISABLE avoids macOS xattr noise in the
-            #     guest's GNU tar; --format=ustar keeps it portable.
+            #     guest's GNU tar. --format=posix (pax) supports UIDs beyond the
+            #     ustar limit (2097151) — needed for LDAP/network accounts whose
+            #     UID can be >2e9 (ustar aborts "value N out of uid_t range").
+            #     --numeric-owner keeps the archive reproducible across hosts.
             logging_utils.step(f"Seeding volume {guest_dest} from {src}")
             tarball = _P(_tf.mkstemp(suffix=".tgz")[1])
             try:
                 import subprocess as _sp
                 _env = dict(_os.environ, COPYFILE_DISABLE="1")
                 _sp.run(
-                    ["tar", "czf", str(tarball), "--format=ustar", "-C", str(src), "."],
+                    ["tar", "czf", str(tarball), "--format=posix", "--numeric-owner",
+                     "-C", str(src), "."],
                     check=True, env=_env,
                 )
                 guest_tar = "/tmp/.microcode-seed.tgz"
