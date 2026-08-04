@@ -79,6 +79,10 @@ def _clone_argv(m: PlatformManifest) -> list[str]:
     depth_arg = f"{depth_flag} " if depth_flag else ""
     script = (
         f"set -e; "
+        # This runs as root; the cloned tree ends up root-owned while the dest
+        # dir may have been loki-owned. Without this, git refuses to operate on
+        # the moved repo ("dubious ownership") because the owner changed.
+        f'git config --global --add safe.directory "*" && '
         f"{ssh_prefix}"
         f"rm -rf /tmp/ws-clone && "
         f"git clone {depth_arg}--branch {branch} '{url}' /tmp/ws-clone && "
