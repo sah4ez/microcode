@@ -186,8 +186,29 @@ sandbox:
         echo '[bootstrap] tg v3 CLI + transport plugin (tgp-go)'
         export PATH="/usr/local/go/bin:$PATH"
         export GOPATH="${GOPATH:-/root/go}"
-        go install github.com/seniorGolang/tg/v3/cmd/tg@latest
-        ln -sf "$GOPATH/bin/tg" /usr/local/bin/tg
+        # Build tg from source (git clone + go build) instead of `go install`:
+        # - pins the exact version (v3.0.5 tag, not @latest surprise)
+        # - lets us apply the download race-condition patch UP FRONT (the stock
+        #   binary deterministically hits `Failed to extract archive ...-skills.tar.gz:
+        #   EOF` under the microsandbox network layer), so tg pkg add works on the
+        #   first try instead of needing a rebuild-after-failure fallback.
+        # See test-todo2/custom-skills/tg-patch/README.md for the root-cause analysis.
+        TG_TAG="v3.0.5"
+        rm -rf /tmp/tgsrc
+        git clone --depth 1 --branch "$TG_TAG" https://github.com/seniorGolang/tg /tmp/tgsrc
+        # Apply the committed race-condition fix: drop the `default:` arm in
+        # downloadWithProgress that returns before close(progress) flushes the
+        # downloaded file → extractArchive hits EOF.
+        if [ -f /workspace/skills/tg-patch/install.go.patched ]; then
+          cp /workspace/skills/tg-patch/install.go.patched \
+             /tmp/tgsrc/internal/installer/managers/installation/install.go
+          echo '[bootstrap] applied tg download race-condition patch'
+        else
+          echo '[bootstrap] WARN: install.go.patched not found; building stock tg'
+        fi
+        ( cd /tmp/tgsrc && CGO_ENABLED=0 go build -o /usr/local/bin/tg ./cmd/tg )
+        rm -rf /tmp/tgsrc
+        chmod +x /usr/local/bin/tg
         tg --version 2>/dev/null || true
         # transport-codegen plugins (WASM, built via wazero — slow first build).
         # Install ONLY what this project needs: astg (the @tg parser, required)
@@ -195,28 +216,11 @@ sandbox:
         # tries to build ALL 10 plugins and hangs; the :<name> suffix selects
         # one, and --fail-on-missing makes it non-interactive.
         mkdir -p /root/.agents
-        #
-        # tg v3 has a download race-condition (downloadWithProgress returns before
-        # the file is flushed → `Failed to extract archive ...-skills.tar.gz: EOF`)
-        # that fires deterministically under the microsandbox network layer. If the
-        # stock `tg pkg add` fails, apply the patch and rebuild tg from source,
-        # then retry. See test-todo2/tg-patch/README.md for the root-cause analysis.
         tg_install_plugins() {
           HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg   --fail-on-missing && \
           HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:server --fail-on-missing
         }
-        if ! tg_install_plugins; then
-          echo '[bootstrap] tg pkg add hit the download race; patching + rebuilding tg'
-          rm -rf /tmp/tgsrc && git clone --depth 1 --branch v3.0.5 https://github.com/seniorGolang/tg /tmp/tgsrc
-          # Apply the committed race-condition fix (drop the `default:` arm in
-          # downloadWithProgress that returns before close(progress) flushes the
-          # downloaded file → extractArchive hits EOF). See custom-skills/tg-patch/.
-          cp /workspace/skills/tg-patch/install.go.patched \
-             /tmp/tgsrc/internal/installer/managers/installation/install.go
-          ( cd /tmp/tgsrc && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /usr/local/bin/tg ./cmd/tg )
-          rm -rf /tmp/tgsrc
-          tg_install_plugins || echo "[bootstrap] WARN: tg plugins still failed"
-        fi
+        tg_install_plugins || echo "[bootstrap] WARN: tg plugins still failed"
         # The agent runs as the unprivileged `loki` user. tg plugins live under
         # /root/.tg (HOME-scoped). Mirror them for loki so `tg server` /
         # `tg client-go` work in the loki session too.
@@ -241,9 +245,9 @@ sandbox:
         ' || true
     snapshot:
       # --- APPLY mode (active): boot from the pre-built snapshot ---
-      from_snapshot: mcd-base
+      # from_snapshot: mcd-base
       # --- BUILD mode: set enabled: true (and comment from_snapshot) to recapture ---
-      # enabled: true
+      enabled: true
       name: mcd-base
 
   mounts:
