@@ -186,26 +186,14 @@ sandbox:
         echo '[bootstrap] tg v3 CLI + transport plugin (tgp-go)'
         export PATH="/usr/local/go/bin:$PATH"
         export GOPATH="${GOPATH:-/root/go}"
-        # Build tg from source (git clone + go build) instead of `go install`:
-        # - pins the exact version (v3.0.5 tag, not @latest surprise)
-        # - lets us apply the download race-condition patch UP FRONT (the stock
-        #   binary deterministically hits `Failed to extract archive ...-skills.tar.gz:
-        #   EOF` under the microsandbox network layer), so tg pkg add works on the
-        #   first try instead of needing a rebuild-after-failure fallback.
-        # See test-todo2/custom-skills/tg-patch/README.md for the root-cause analysis.
+        # Build tg from source (git clone + go build) — pins the exact version
+        # (v3.0.5 tag) and lets us iterate on fixes. The stock binary hits a
+        # download race-condition (`Failed to extract archive ...-skills.tar.gz:
+        # EOF`) under the microsandbox network layer; we capture a full debug
+        # trace on failure for the upstream issue report.
         TG_TAG="v3.0.5"
         rm -rf /tmp/tgsrc
         git clone --depth 1 --branch "$TG_TAG" https://github.com/seniorGolang/tg /tmp/tgsrc
-        # Apply the committed race-condition fix: drop the `default:` arm in
-        # downloadWithProgress that returns before close(progress) flushes the
-        # downloaded file → extractArchive hits EOF.
-        if [ -f /workspace/skills/tg-patch/install.go.patched ]; then
-          cp /workspace/skills/tg-patch/install.go.patched \
-             /tmp/tgsrc/internal/installer/managers/installation/install.go
-          echo '[bootstrap] applied tg download race-condition patch'
-        else
-          echo '[bootstrap] WARN: install.go.patched not found; building stock tg'
-        fi
         ( cd /tmp/tgsrc && CGO_ENABLED=0 go build -o /usr/local/bin/tg ./cmd/tg )
         rm -rf /tmp/tgsrc
         chmod +x /usr/local/bin/tg
@@ -216,11 +204,36 @@ sandbox:
         # tries to build ALL 10 plugins and hangs; the :<name> suffix selects
         # one, and --fail-on-missing makes it non-interactive.
         mkdir -p /root/.agents
+        #
+        # On failure, capture a full verbose+debug trace (stack, download steps,
+        # file sizes/md5) to /tmp/tg-pkg-add-debug.log for an upstream issue.
+        # The log is retrievable via: msb cp <vm>:/tmp/tg-pkg-add-debug.log ./
         tg_install_plugins() {
           HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg   --fail-on-missing && \
           HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:server --fail-on-missing
         }
-        tg_install_plugins || echo "[bootstrap] WARN: tg plugins still failed"
+        if tg_install_plugins 2>/tmp/tg-pkg-add-stderr.log; then
+          echo '[bootstrap] tg plugins installed'
+        else
+          echo '[bootstrap] tg pkg add failed — capturing debug trace for issue report'
+          # Re-run the FIRST failing plugin with -v --log-level debug so the log
+          # has the full download/extract stack trace.
+          HOME=/root tg pkg add https://github.com/seniorGolang/tgp-go:astg \
+            --fail-on-missing -v --log-level debug \
+            >/tmp/tg-pkg-add-debug.log 2>&1 || true
+          # Also capture the partially-downloaded archive (md5 + size) so the
+          # upstream maintainer can compare against a known-good download.
+          echo '--- partial archive (if any) ---' >> /tmp/tg-pkg-add-debug.log
+          find /root/.agents /tmp -name '*-skills.tar.gz' -o -name '*.tar.gz' 2>/dev/null \
+            | head -5 >> /tmp/tg-pkg-add-debug.log
+          find /root/.agents /tmp -name '*-skills.tar.gz' 2>/dev/null \
+            | while read -r f; do echo "$f: $(wc -c < "$f") bytes, md5=$(md5sum "$f" | cut -d' ' -f1)"; done \
+            >> /tmp/tg-pkg-add-debug.log 2>&1 || true
+          echo '--- tg version + environment ---' >> /tmp/tg-pkg-add-debug.log
+          tg --version >> /tmp/tg-pkg-add-debug.log 2>&1 || true
+          echo "uname: $(uname -a)" >> /tmp/tg-pkg-add-debug.log
+          echo '[bootstrap] debug trace at /tmp/tg-pkg-add-debug.log (msb cp to retrieve)'
+        fi
         # The agent runs as the unprivileged `loki` user. tg plugins live under
         # /root/.tg (HOME-scoped). Mirror them for loki so `tg server` /
         # `tg client-go` work in the loki session too.
