@@ -10,7 +10,28 @@ from microcode.manifest import PlatformManifest
 from microcode.runners.base import ShellRunner, require
 
 
-def _resolve_prd_guest_path(m: PlatformManifest, prd: str) -> str:
+def _git_repo_prefix(root: str | None) -> str:
+    """Return the path from the git repo root to ``root`` (the manifest dir).
+
+    e.g. if the repo root is /home/x/microcode and root is /home/x/microcode/
+    test-todo2, this returns "test-todo2/". Used to prefix PRD paths when
+    sandbox.sync clones the WHOLE repo into /workspace (the manifest dir is a
+    subdirectory of the clone, not its root). Returns "" on any error.
+    """
+    import subprocess
+    if not root:
+        return ""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--show-prefix"],
+            cwd=root, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return out  # e.g. "test-todo2/" or "" if root IS the repo root
+    except Exception:
+        return ""
+
+
+def _resolve_prd_guest_path(m: PlatformManifest, prd: str, root: str | None = None) -> str:
     """Translate a host-relative ``--prd`` path into the path loki sees in the VM.
 
     ``loki start`` runs after ``cd /workspace`` (see :func:`loki_start_argv`), so
@@ -35,6 +56,16 @@ def _resolve_prd_guest_path(m: PlatformManifest, prd: str) -> str:
     prd_norm = prd.strip()
     if not prd_norm or os.path.isabs(prd_norm):
         return prd_norm
+
+    # When sandbox.sync clones the remote into sync.dest (default /workspace),
+    # the FULL repository tree appears under /workspace — not just the manifest
+    # dir. A PRD given as "src/PRD.md" (relative to the manifest dir, e.g.
+    # test-todo2/) actually lands at /workspace/test-todo2/src/PRD.md after the
+    # clone. Prepend the path from the repo root to the manifest dir (the git
+    # "prefix") so loki finds it after `cd /workspace`.
+    if m.sandbox.sync.enabled and m.sandbox.sync.dest.rstrip("/") == "/workspace":
+        prefix = _git_repo_prefix(root) if root else ""
+        return f"{prefix}{prd_norm}" if prefix else prd_norm
 
     # Pick the longest host-prefix match so nested mounts win over shallow ones.
     best = None
@@ -68,7 +99,7 @@ def _resolve_prd_guest_path(m: PlatformManifest, prd: str) -> str:
     return os.path.join(guest, rel)
 
 
-def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> list[str]:
+def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None, root: str | None = None) -> list[str]:
     """Build ``msb exec <name> --user loki -- bash -lc '... loki start ...'``.
 
     Runs as the unprivileged ``loki`` user (created by bootstrap) so provider
@@ -92,7 +123,7 @@ def loki_start_argv(m: PlatformManifest, config_guest: str, prd: str | None) -> 
         f"&& export HOME=/home/loki "
         f"&& cd /workspace "
     )
-    prd_arg = _resolve_prd_guest_path(m, prd) if prd else ""
+    prd_arg = _resolve_prd_guest_path(m, prd, root=root) if prd else ""
     inner = (
         f"{prefix}&& loki start --config {config_guest} --provider {m.loki.provider}"
         + (" --api" if m.loki.dashboard else " --no-dashboard")
@@ -152,5 +183,5 @@ class LokiRunner(ShellRunner):
                 "msb", "cp", self.config_host,
                 f"{self.m.sandbox.name}:{self.config_guest}",
             ])
-        cmds.append(loki_start_argv(self.m, self.config_guest, self.prd))
+        cmds.append(loki_start_argv(self.m, self.config_guest, self.prd, root=self.cwd))
         super().run(cmds, dry_run=dry_run)
