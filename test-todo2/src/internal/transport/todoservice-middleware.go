@@ -8,9 +8,9 @@ import (
 	"github.com/loki/todoservice/contracts/dto"
 )
 
-type TodoServiceCreate func(ctx context.Context, title string, description string) (todo dto.Todo, err error)
-type TodoServiceList func(ctx context.Context) (todos []dto.Todo, err error)
-type TodoServiceGet func(ctx context.Context, id int64) (todo dto.Todo, err error)
+type TodoServiceCreate func(ctx context.Context, lkId int64, title string, description string) (todo dto.Todo, err error)
+type TodoServiceList func(ctx context.Context, lkId int64) (todos []dto.Todo, err error)
+type TodoServiceGet func(ctx context.Context, lkId int64, id int64) (todo dto.Todo, err error)
 type TodoServiceUpdate func(ctx context.Context, id int64, title *string, description *string, completed *bool) (todo dto.Todo, err error)
 type TodoServiceDelete func(ctx context.Context, id int64) (err error)
 type TodoServiceToggle func(ctx context.Context, id int64) (todo dto.Todo, err error)

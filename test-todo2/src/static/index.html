@@ -12,7 +12,20 @@
   <main class="container">
     <h1>Todos</h1>
 
-    <!-- Create form: title required, description optional -->
+    <!-- Cabinet (ЛК) selector: dropdown lists all cabinets; switching reloads
+         todos for the selected cabinet via the x-lk-id header. -->
+    <section class="card cabinet-card">
+      <label for="lk-select" class="cabinet-label">Личный кабинет</label>
+      <select id="lk-select"></select>
+      <!-- Create a new cabinet inline -->
+      <form id="lk-create-form" class="lk-create">
+        <input id="lk-name" name="name" type="text" placeholder="New cabinet name" autocomplete="off" required />
+        <button type="submit" class="secondary">Add cabinet</button>
+      </form>
+    </section>
+
+    <!-- Create form: title required, description optional. Sent under the active
+         cabinet's x-lk-id. -->
     <form id="create-form" class="card">
       <input id="title" name="title" type="text" placeholder="Title (required)" autocomplete="off" required />
       <input id="description" name="description" type="text" placeholder="Description (optional)" autocomplete="off" />
@@ -21,7 +34,7 @@
 
     <p id="error" class="error" hidden></p>
 
-    <!-- Todo list -->
+    <!-- Todo list (scoped to the active cabinet) -->
     <ul id="todo-list" class="todo-list" aria-live="polite"></ul>
   </main>
 

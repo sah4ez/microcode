@@ -15,35 +15,47 @@ import (
 // @tg http-server
 // @tg metrics
 type TodoService interface {
-	// Create stores a new todo and returns it with id/created_at/completed=false.
+	// Create stores a new todo in the cabinet identified by the `x-lk-id`
+	// request header and returns it with id/created_at/completed=false.
 	//
 	// @tg http-method=POST
 	// @tg http-path=`/todos`
 	// @tg http-success=201
 	// @tg enableInlineSingle
+	// @tg http-headers=lkId|x-lk-id|explicit
 	// @tg summary=`Create a todo`
 	// @tg requestBodyDesc=`Title is required; description is optional.`
+	// @tg lkId.desc=`Cabinet id, supplied via the x-lk-id header`
+	// @tg lkId.required
 	// @tg title.required
 	// @tg title.desc=`Short summary, must be non-empty`
 	// @tg description.desc=`Optional long-form description`
-	Create(ctx context.Context, title string, description string) (todo dto.Todo, err error)
+	Create(ctx context.Context, lkId int64, title string, description string) (todo dto.Todo, err error)
 
-	// List returns every stored todo.
+	// List returns every todo that belongs to the cabinet identified by the
+	// `x-lk-id` request header (only that cabinet's records are returned).
 	//
 	// @tg http-method=GET
 	// @tg http-path=`/todos`
-	// @tg summary=`List all todos`
-	List(ctx context.Context) (todos []dto.Todo, err error)
+	// @tg http-headers=lkId|x-lk-id|explicit
+	// @tg summary=`List todos for the active cabinet`
+	// @tg lkId.desc=`Cabinet id, supplied via the x-lk-id header`
+	// @tg lkId.required
+	List(ctx context.Context, lkId int64) (todos []dto.Todo, err error)
 
-	// Get returns a single todo by id; ErrNotFound when missing.
+	// Get returns a single todo by id, but only if it belongs to the cabinet
+	// identified by the `x-lk-id` request header; otherwise ErrNotFound.
 	//
 	// @tg http-method=GET
 	// @tg http-path=`/todos/:id`
 	// @tg http-args=id|id|explicit
+	// @tg http-headers=lkId|x-lk-id|explicit
 	// @tg enableInlineSingle
 	// @tg summary=`Get a todo by id`
 	// @tg id.desc=`Todo id`
-	Get(ctx context.Context, id int64) (todo dto.Todo, err error)
+	// @tg lkId.desc=`Cabinet id, supplied via the x-lk-id header`
+	// @tg lkId.required
+	Get(ctx context.Context, lkId int64, id int64) (todo dto.Todo, err error)
 
 	// Update edits title/description and/or the completed flag of a todo.
 	// All fields except id are optional (PATCH semantics): nil pointers keep

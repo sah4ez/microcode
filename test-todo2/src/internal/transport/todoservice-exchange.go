@@ -4,6 +4,7 @@ package transport
 import "github.com/loki/todoservice/contracts/dto"
 
 type requestTodoServiceCreate struct {
+	LkId        int64  `json:"-"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
@@ -12,14 +13,17 @@ type responseTodoServiceCreate struct {
 	dto.Todo `json:",inline"`
 }
 
-type requestTodoServiceList struct{}
+type requestTodoServiceList struct {
+	LkId int64 `json:"-"`
+}
 
 type responseTodoServiceList struct {
 	Todos []dto.Todo `json:"todos"`
 }
 
 type requestTodoServiceGet struct {
-	Id int64 `json:"-"`
+	LkId int64 `json:"-"`
+	Id   int64 `json:"-"`
 }
 
 type responseTodoServiceGet struct {

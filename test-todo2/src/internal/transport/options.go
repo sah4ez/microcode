@@ -25,6 +25,16 @@ func Service(svc ServiceRoute) Option {
 	}
 }
 
+func PersonalProfileService(svc contracts.PersonalProfileService) Option {
+	return func(srv *Server) {
+		if srv.srvHTTP != nil {
+			httpSvc := newPersonalProfileService(svc)
+			srv.httpPersonalProfileService = httpSvc
+			httpSvc.SetRoutes(srv.Fiber())
+		}
+	}
+}
+
 func TodoService(svc contracts.TodoService) Option {
 	return func(srv *Server) {
 		if srv.srvHTTP != nil {

@@ -11,6 +11,12 @@ type Todo struct {
 	// @tg desc=`Unique todo identifier`
 	ID int64 `json:"id"`
 
+	// LkID is the личный кабинет (personal profile) this todo belongs to. It is
+	// supplied by the client on create via the `x-lk-id` request header and used
+	// to scope list/get so a request only ever sees its own cabinet's records.
+	// @tg desc=`Personal profile (cabinet) id this todo belongs to`
+	LkID int64 `json:"lk_id"`
+
 	// Title is the short summary. Required on create.
 	// @tg desc=`Short summary of the todo`
 	Title string `json:"title"`

@@ -33,20 +33,25 @@ survives restarts.
 All request/response bodies are JSON. Single-resource responses are the bare
 todo object; the list endpoint wraps the array.
 
-| Method & path                | Body                                       | Success           | Errors |
-|------------------------------|--------------------------------------------|-------------------|--------|
-| `POST /todos`                | `{"title":"...","description":"..."}`      | `201` + Todo      | `422` blank title, `400` bad JSON |
-| `GET /todos`                 | —                                          | `200` `{"todos":[...]}` | — |
-| `GET /todos/{id}`            | —                                          | `200` + Todo      | `404` |
-| `PATCH /todos/{id}`          | `{"title":...,"description":...,"completed":...}` (all optional) | `200` + Todo | `404`, `422` blank title |
-| `DELETE /todos/{id}`         | —                                          | `204`             | `404` |
-| `POST /todos/{id}/toggle`    | —                                          | `200` + Todo      | `404` |
+> **Every `/todos` request requires the `x-lk-id` header** — the id of the
+> personal cabinet (ЛК) the todo belongs to. See
+> [Работа с личными кабинетами (ЛК)](#работа-с-личными-кабинетами-лк) below.
+
+| Method & path                | Headers          | Body                                       | Success           | Errors |
+|------------------------------|------------------|--------------------------------------------|-------------------|--------|
+| `POST /todos`                | `x-lk-id`        | `{"title":"...","description":"..."}`      | `201` + Todo      | `422` blank title, `400` bad JSON / missing `x-lk-id` |
+| `GET /todos`                 | `x-lk-id`        | —                                          | `200` `{"todos":[...]}` | `400` missing `x-lk-id` |
+| `GET /todos/{id}`            | `x-lk-id`        | —                                          | `200` + Todo      | `404`, `400` missing `x-lk-id` |
+| `PATCH /todos/{id}`          | `x-lk-id`        | `{"title":...,"description":...,"completed":...}` (all optional) | `200` + Todo | `404`, `422` blank title, `400` missing `x-lk-id` |
+| `DELETE /todos/{id}`         | `x-lk-id`        | —                                          | `204`             | `404`, `400` missing `x-lk-id` |
+| `POST /todos/{id}/toggle`    | `x-lk-id`        | —                                          | `200` + Todo      | `404`, `400` missing `x-lk-id` |
 
 A `Todo` looks like:
 
 ```json
 {
   "id": 1,
+  "lk_id": 1,
   "title": "Buy milk",
   "description": "2 liters",
   "completed": false,
@@ -54,33 +59,95 @@ A `Todo` looks like:
 }
 ```
 
-Errors are returned as `{"error": "..."}`.
+Errors are returned as `{"error": "..."}`. A missing `x-lk-id` yields
+`400 {"error":"x-lk-id header is required"}`.
 
 ### curl examples
 
 ```bash
-# Create a todo
+# Create a todo in cabinet 1
 curl -i -X POST http://127.0.0.1:8000/todos \
   -H 'Content-Type: application/json' \
+  -H 'x-lk-id: 1' \
   -d '{"title":"Buy milk","description":"2 liters"}'
 
-# List all todos
-curl -i http://127.0.0.1:8000/todos
+# List todos in cabinet 1 (only that cabinet's todos)
+curl -i -H 'x-lk-id: 1' http://127.0.0.1:8000/todos
 
 # Get one
-curl -i http://127.0.0.1:8000/todos/1
+curl -i -H 'x-lk-id: 1' http://127.0.0.1:8000/todos/1
 
 # Update (toggle completed via PATCH)
 curl -i -X PATCH http://127.0.0.1:8000/todos/1 \
   -H 'Content-Type: application/json' \
+  -H 'x-lk-id: 1' \
   -d '{"completed":true}'
 
 # Toggle completion
-curl -i -X POST http://127.0.0.1:8000/todos/1/toggle
+curl -i -X POST -H 'x-lk-id: 1' http://127.0.0.1:8000/todos/1/toggle
 
 # Delete
-curl -i -X DELETE http://127.0.0.1:8000/todos/1
+curl -i -X DELETE -H 'x-lk-id: 1' http://127.0.0.1:8000/todos/1
 ```
+
+## Работа с личными кабинетами (ЛК)
+
+Личный кабинет (ЛК, personal profile/cabinet) — это独立ный набор задач. Каждый
+ЛК владеет своим disjoint-множеством todo: запрос с `x-lk-id: N` видит **только**
+todo, принадлежащие кабинету `N`. Это позволяет вести, например, отдельные списки
+«Работа» и «Дом» и переключаться между ними.
+
+### Модель данных
+
+ЛК хранятся в **отдельной таблице** `personal_profiles` (см.
+[`internal/storage/sqlite`](internal/storage/sqlite)). Таблица `todos` несёт
+внешний ключ `lk_id`, ссылающийся на кабинет-владельца. При старте сервис
+проверяет схему: старая таблица `todos` без колонки `lk_id` удаляется и
+создаётся заново («удалить старые данные и создать с нуля»), уже-мигрированная
+таблица остаётся нетронутой.
+
+`PersonalProfile`:
+
+```json
+{ "id": 1, "name": "Работа", "created_at": "2026-08-05T19:34:46Z" }
+```
+
+### API личных кабинетов (`/personal-profile`)
+
+CRUD кабинетов. Авторизация ресурса при работе с todo идёт по `x-lk-id`
+(значение = `id` кабинета).
+
+| Method & path                  | Body                  | Success                   | Errors |
+|--------------------------------|-----------------------|---------------------------|--------|
+| `POST /personal-profile`       | `{"name":"..."}`      | `201` + Profile           | `422` blank name |
+| `GET /personal-profile`        | —                     | `200` `{"profiles":[...]}` | — |
+| `GET /personal-profile/{id}`   | —                     | `200` + Profile           | `404` |
+| `PATCH /personal-profile/{id}` | `{"name":"..."}`      | `200` + Profile           | `404`, `422` blank name |
+| `DELETE /personal-profile/{id}`| —                     | `204`                     | `404` |
+
+```bash
+# Создать кабинет
+curl -i -X POST http://127.0.0.1:8000/personal-profile \
+  -H 'Content-Type: application/json' -d '{"name":"Работа"}'
+
+# Список кабинетов
+curl -i http://127.0.0.1:8000/personal-profile
+```
+
+### Web UI
+
+Веб-интерфейс (`/`, [`static/index.html`](static/index.html) +
+[`static/app.js`](static/app.js)) содержит **dropdown** со списком всех ЛК.
+Переключение в dropdown:
+
+1. обновляет активный кабинет (`x-lk-id`);
+2. перезагружает список todo — видны **только** записи выбранного кабинета
+   (Non-functional requirement: «при переключении между лк должны
+   перезагружаться все доступные записи»);
+3. новый todo создаётся в активном кабинете.
+
+Выбранный кабинет сохраняется в `localStorage`, так что перезагрузка страницы
+сохраняет контекст. Кабинет можно создать инлайн-формой рядом с dropdown.
 
 ## Regenerate the transport
 

@@ -34,7 +34,7 @@ func metricsMiddlewareTodoService(next contracts.TodoService, metrics *Metrics) 
 	}
 }
 
-func (m metricsTodoService) Create(ctx context.Context, title string, description string) (todo dto.Todo, err error) {
+func (m metricsTodoService) Create(ctx context.Context, lkId int64, title string, description string) (todo dto.Todo, err error) {
 
 	defer func(_begin_ time.Time) {
 		if m.metrics == nil {
@@ -63,10 +63,10 @@ func (m metricsTodoService) Create(ctx context.Context, title string, descriptio
 		}
 	}(time.Now())
 
-	return m.next.Create(ctx, title, description)
+	return m.next.Create(ctx, lkId, title, description)
 }
 
-func (m metricsTodoService) List(ctx context.Context) (todos []dto.Todo, err error) {
+func (m metricsTodoService) List(ctx context.Context, lkId int64) (todos []dto.Todo, err error) {
 
 	defer func(_begin_ time.Time) {
 		if m.metrics == nil {
@@ -95,10 +95,10 @@ func (m metricsTodoService) List(ctx context.Context) (todos []dto.Todo, err err
 		}
 	}(time.Now())
 
-	return m.next.List(ctx)
+	return m.next.List(ctx, lkId)
 }
 
-func (m metricsTodoService) Get(ctx context.Context, id int64) (todo dto.Todo, err error) {
+func (m metricsTodoService) Get(ctx context.Context, lkId int64, id int64) (todo dto.Todo, err error) {
 
 	defer func(_begin_ time.Time) {
 		if m.metrics == nil {
@@ -127,7 +127,7 @@ func (m metricsTodoService) Get(ctx context.Context, id int64) (todo dto.Todo, e
 		}
 	}(time.Now())
 
-	return m.next.Get(ctx, id)
+	return m.next.Get(ctx, lkId, id)
 }
 
 func (m metricsTodoService) Update(ctx context.Context, id int64, title *string, description *string, completed *bool) (todo dto.Todo, err error) {

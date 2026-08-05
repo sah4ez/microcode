@@ -22,6 +22,8 @@ type Server struct {
 
 	metrics *Metrics
 
+	httpPersonalProfileService *httpPersonalProfileService
+
 	httpTodoService *httpTodoService
 
 	headerHandlers map[string]HeaderHandler
@@ -107,6 +109,7 @@ func doesNotRequireHTTP(option Option) bool {
 	}
 	option(testSrv)
 	noHTTPService := testSrv.srvHTTP == nil
+	noHTTPService = noHTTPService && testSrv.httpPersonalProfileService == nil
 	noHTTPService = noHTTPService && testSrv.httpTodoService == nil
 	return noHTTPService
 }
@@ -230,6 +233,10 @@ func (srv *Server) WithMetrics() *Server {
 		srv.httpTodoService = srv.httpTodoService.WithMetrics(srv.metrics)
 	}
 	return srv
+}
+
+func (srv *Server) PersonalProfileService() *httpPersonalProfileService {
+	return srv.httpPersonalProfileService
 }
 
 func (srv *Server) TodoService() *httpTodoService {

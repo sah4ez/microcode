@@ -52,16 +52,16 @@ func (srv *serverTodoService) Wrap(m MiddlewareTodoService) {
 	srv.toggle = srv.svc.Toggle
 }
 
-func (srv *serverTodoService) Create(ctx context.Context, title string, description string) (todo dto.Todo, err error) {
-	return srv.create(ctx, title, description)
+func (srv *serverTodoService) Create(ctx context.Context, lkId int64, title string, description string) (todo dto.Todo, err error) {
+	return srv.create(ctx, lkId, title, description)
 }
 
-func (srv *serverTodoService) List(ctx context.Context) (todos []dto.Todo, err error) {
-	return srv.list(ctx)
+func (srv *serverTodoService) List(ctx context.Context, lkId int64) (todos []dto.Todo, err error) {
+	return srv.list(ctx, lkId)
 }
 
-func (srv *serverTodoService) Get(ctx context.Context, id int64) (todo dto.Todo, err error) {
-	return srv.get(ctx, id)
+func (srv *serverTodoService) Get(ctx context.Context, lkId int64, id int64) (todo dto.Todo, err error) {
+	return srv.get(ctx, lkId, id)
 }
 
 func (srv *serverTodoService) Update(ctx context.Context, id int64, title *string, description *string, completed *bool) (todo dto.Todo, err error) {

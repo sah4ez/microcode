@@ -10,18 +10,18 @@ import (
 	"github.com/loki/todoservice/internal/transport/srvctx"
 )
 
-func (http *httpTodoService) create(ctx context.Context, request requestTodoServiceCreate) (response responseTodoServiceCreate, err error) {
+func (http *httpPersonalProfileService) create(ctx context.Context, request requestPersonalProfileServiceCreate) (response responsePersonalProfileServiceCreate, err error) {
 
-	ctx = withMethodLogger(ctx, "todoService", "create")
+	ctx = withMethodLogger(ctx, "personalProfileService", "create")
 
-	if response.Todo, err = http.svc.Create(ctx, request.LkId, request.Title, request.Description); err != nil {
+	if response.PersonalProfile, err = http.svc.Create(ctx, request.Name); err != nil {
 		if http.errorHandler != nil {
 			err = http.errorHandler(err)
 		}
 	}
 	return
 }
-func (http *httpTodoService) serveCreate(ftx *fiber.Ctx) (err error) {
+func (http *httpPersonalProfileService) serveCreate(ftx *fiber.Ctx) (err error) {
 
 	clientID := srvctx.GetClientID(ftx.UserContext())
 	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -31,7 +31,7 @@ func (http *httpTodoService) serveCreate(ftx *fiber.Ctx) (err error) {
 			}
 		}()
 	}
-	var request requestTodoServiceCreate
+	var request requestPersonalProfileServiceCreate
 	ftx.Response().SetStatusCode(201)
 	bodyStream := ensureBodyReader(ftx.Context().RequestBodyStream())
 	if err = json.NewDecoder(bodyStream).Decode(&request); err != nil {
@@ -43,24 +43,14 @@ func (http *httpTodoService) serveCreate(ftx *fiber.Ctx) (err error) {
 		return
 	}
 
-	if _lkId_b := ftx.Request().Header.Peek("x-lk-id"); _lkId_b != nil {
-		_lkId_ := string(_lkId_b)
-		var lkId int64
-		if lkId, err = strconv.ParseInt(_lkId_, 10, 64); err != nil {
-			ftx.Status(fiber.StatusBadRequest)
-			return sendResponse(ftx, "http header could not be decoded: "+err.Error())
-		}
-		request.LkId = lkId
-	}
-
-	var response responseTodoServiceCreate
+	var response responsePersonalProfileServiceCreate
 	if response, err = http.create(ftx.UserContext(), request); err == nil {
 		var iResponse any = response
 		if redirect, ok := iResponse.(withRedirect); ok {
 			return ftx.Redirect(redirect.RedirectTo())
 		}
 
-		return sendResponse(ftx, response.Todo)
+		return sendResponse(ftx, response.PersonalProfile)
 	}
 	var statusCode int
 	if errCoder, ok := err.(withErrorCode); ok {
@@ -75,18 +65,18 @@ func (http *httpTodoService) serveCreate(ftx *fiber.Ctx) (err error) {
 	}
 	return sendResponse(ftx, err)
 }
-func (http *httpTodoService) list(ctx context.Context, request requestTodoServiceList) (response responseTodoServiceList, err error) {
+func (http *httpPersonalProfileService) list(ctx context.Context, request requestPersonalProfileServiceList) (response responsePersonalProfileServiceList, err error) {
 
-	ctx = withMethodLogger(ctx, "todoService", "list")
+	ctx = withMethodLogger(ctx, "personalProfileService", "list")
 
-	if response.Todos, err = http.svc.List(ctx, request.LkId); err != nil {
+	if response.Profiles, err = http.svc.List(ctx); err != nil {
 		if http.errorHandler != nil {
 			err = http.errorHandler(err)
 		}
 	}
 	return
 }
-func (http *httpTodoService) serveList(ftx *fiber.Ctx) (err error) {
+func (http *httpPersonalProfileService) serveList(ftx *fiber.Ctx) (err error) {
 
 	clientID := srvctx.GetClientID(ftx.UserContext())
 	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -96,19 +86,9 @@ func (http *httpTodoService) serveList(ftx *fiber.Ctx) (err error) {
 			}
 		}()
 	}
-	var request requestTodoServiceList
+	var request requestPersonalProfileServiceList
 
-	if _lkId_b := ftx.Request().Header.Peek("x-lk-id"); _lkId_b != nil {
-		_lkId_ := string(_lkId_b)
-		var lkId int64
-		if lkId, err = strconv.ParseInt(_lkId_, 10, 64); err != nil {
-			ftx.Status(fiber.StatusBadRequest)
-			return sendResponse(ftx, "http header could not be decoded: "+err.Error())
-		}
-		request.LkId = lkId
-	}
-
-	var response responseTodoServiceList
+	var response responsePersonalProfileServiceList
 	if response, err = http.list(ftx.UserContext(), request); err == nil {
 		var iResponse any = response
 		if redirect, ok := iResponse.(withRedirect); ok {
@@ -130,18 +110,18 @@ func (http *httpTodoService) serveList(ftx *fiber.Ctx) (err error) {
 	}
 	return sendResponse(ftx, err)
 }
-func (http *httpTodoService) get(ctx context.Context, request requestTodoServiceGet) (response responseTodoServiceGet, err error) {
+func (http *httpPersonalProfileService) get(ctx context.Context, request requestPersonalProfileServiceGet) (response responsePersonalProfileServiceGet, err error) {
 
-	ctx = withMethodLogger(ctx, "todoService", "get")
+	ctx = withMethodLogger(ctx, "personalProfileService", "get")
 
-	if response.Todo, err = http.svc.Get(ctx, request.LkId, request.Id); err != nil {
+	if response.PersonalProfile, err = http.svc.Get(ctx, request.Id); err != nil {
 		if http.errorHandler != nil {
 			err = http.errorHandler(err)
 		}
 	}
 	return
 }
-func (http *httpTodoService) serveGet(ftx *fiber.Ctx) (err error) {
+func (http *httpPersonalProfileService) serveGet(ftx *fiber.Ctx) (err error) {
 
 	clientID := srvctx.GetClientID(ftx.UserContext())
 	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -151,7 +131,7 @@ func (http *httpTodoService) serveGet(ftx *fiber.Ctx) (err error) {
 			}
 		}()
 	}
-	var request requestTodoServiceGet
+	var request requestPersonalProfileServiceGet
 
 	if _id_ := ftx.Params("id"); _id_ != "" {
 		var id int64
@@ -162,24 +142,14 @@ func (http *httpTodoService) serveGet(ftx *fiber.Ctx) (err error) {
 		request.Id = id
 	}
 
-	if _lkId_b := ftx.Request().Header.Peek("x-lk-id"); _lkId_b != nil {
-		_lkId_ := string(_lkId_b)
-		var lkId int64
-		if lkId, err = strconv.ParseInt(_lkId_, 10, 64); err != nil {
-			ftx.Status(fiber.StatusBadRequest)
-			return sendResponse(ftx, "http header could not be decoded: "+err.Error())
-		}
-		request.LkId = lkId
-	}
-
-	var response responseTodoServiceGet
+	var response responsePersonalProfileServiceGet
 	if response, err = http.get(ftx.UserContext(), request); err == nil {
 		var iResponse any = response
 		if redirect, ok := iResponse.(withRedirect); ok {
 			return ftx.Redirect(redirect.RedirectTo())
 		}
 
-		return sendResponse(ftx, response.Todo)
+		return sendResponse(ftx, response.PersonalProfile)
 	}
 	var statusCode int
 	if errCoder, ok := err.(withErrorCode); ok {
@@ -194,18 +164,18 @@ func (http *httpTodoService) serveGet(ftx *fiber.Ctx) (err error) {
 	}
 	return sendResponse(ftx, err)
 }
-func (http *httpTodoService) update(ctx context.Context, request requestTodoServiceUpdate) (response responseTodoServiceUpdate, err error) {
+func (http *httpPersonalProfileService) update(ctx context.Context, request requestPersonalProfileServiceUpdate) (response responsePersonalProfileServiceUpdate, err error) {
 
-	ctx = withMethodLogger(ctx, "todoService", "update")
+	ctx = withMethodLogger(ctx, "personalProfileService", "update")
 
-	if response.Todo, err = http.svc.Update(ctx, request.Id, request.Title, request.Description, request.Completed); err != nil {
+	if response.PersonalProfile, err = http.svc.Update(ctx, request.Id, request.Name); err != nil {
 		if http.errorHandler != nil {
 			err = http.errorHandler(err)
 		}
 	}
 	return
 }
-func (http *httpTodoService) serveUpdate(ftx *fiber.Ctx) (err error) {
+func (http *httpPersonalProfileService) serveUpdate(ftx *fiber.Ctx) (err error) {
 
 	clientID := srvctx.GetClientID(ftx.UserContext())
 	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -215,7 +185,7 @@ func (http *httpTodoService) serveUpdate(ftx *fiber.Ctx) (err error) {
 			}
 		}()
 	}
-	var request requestTodoServiceUpdate
+	var request requestPersonalProfileServiceUpdate
 	bodyStream := ensureBodyReader(ftx.Context().RequestBodyStream())
 	if err = json.NewDecoder(bodyStream).Decode(&request); err != nil {
 		if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -235,14 +205,14 @@ func (http *httpTodoService) serveUpdate(ftx *fiber.Ctx) (err error) {
 		request.Id = id
 	}
 
-	var response responseTodoServiceUpdate
+	var response responsePersonalProfileServiceUpdate
 	if response, err = http.update(ftx.UserContext(), request); err == nil {
 		var iResponse any = response
 		if redirect, ok := iResponse.(withRedirect); ok {
 			return ftx.Redirect(redirect.RedirectTo())
 		}
 
-		return sendResponse(ftx, response.Todo)
+		return sendResponse(ftx, response.PersonalProfile)
 	}
 	var statusCode int
 	if errCoder, ok := err.(withErrorCode); ok {
@@ -257,9 +227,9 @@ func (http *httpTodoService) serveUpdate(ftx *fiber.Ctx) (err error) {
 	}
 	return sendResponse(ftx, err)
 }
-func (http *httpTodoService) delete(ctx context.Context, request requestTodoServiceDelete) (response responseTodoServiceDelete, err error) {
+func (http *httpPersonalProfileService) delete(ctx context.Context, request requestPersonalProfileServiceDelete) (response responsePersonalProfileServiceDelete, err error) {
 
-	ctx = withMethodLogger(ctx, "todoService", "delete")
+	ctx = withMethodLogger(ctx, "personalProfileService", "delete")
 
 	if err = http.svc.Delete(ctx, request.Id); err != nil {
 		if http.errorHandler != nil {
@@ -268,7 +238,7 @@ func (http *httpTodoService) delete(ctx context.Context, request requestTodoServ
 	}
 	return
 }
-func (http *httpTodoService) serveDelete(ftx *fiber.Ctx) (err error) {
+func (http *httpPersonalProfileService) serveDelete(ftx *fiber.Ctx) (err error) {
 
 	clientID := srvctx.GetClientID(ftx.UserContext())
 	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
@@ -278,7 +248,7 @@ func (http *httpTodoService) serveDelete(ftx *fiber.Ctx) (err error) {
 			}
 		}()
 	}
-	var request requestTodoServiceDelete
+	var request requestPersonalProfileServiceDelete
 	ftx.Response().SetStatusCode(204)
 
 	if _id_ := ftx.Params("id"); _id_ != "" {
@@ -290,7 +260,7 @@ func (http *httpTodoService) serveDelete(ftx *fiber.Ctx) (err error) {
 		request.Id = id
 	}
 
-	var response responseTodoServiceDelete
+	var response responsePersonalProfileServiceDelete
 	if response, err = http.delete(ftx.UserContext(), request); err == nil {
 		var iResponse any = response
 		if redirect, ok := iResponse.(withRedirect); ok {
@@ -298,60 +268,6 @@ func (http *httpTodoService) serveDelete(ftx *fiber.Ctx) (err error) {
 		}
 
 		return sendResponse(ftx, response)
-	}
-	var statusCode int
-	if errCoder, ok := err.(withErrorCode); ok {
-		statusCode = errCoder.Code()
-		ftx.Status(statusCode)
-	} else {
-		statusCode = fiber.StatusInternalServerError
-		ftx.Status(statusCode)
-	}
-	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
-		server.metrics.ErrorResponsesTotal.WithLabelValues("rest", strconv.Itoa(statusCode), clientID).Inc()
-	}
-	return sendResponse(ftx, err)
-}
-func (http *httpTodoService) toggle(ctx context.Context, request requestTodoServiceToggle) (response responseTodoServiceToggle, err error) {
-
-	ctx = withMethodLogger(ctx, "todoService", "toggle")
-
-	if response.Todo, err = http.svc.Toggle(ctx, request.Id); err != nil {
-		if http.errorHandler != nil {
-			err = http.errorHandler(err)
-		}
-	}
-	return
-}
-func (http *httpTodoService) serveToggle(ftx *fiber.Ctx) (err error) {
-
-	clientID := srvctx.GetClientID(ftx.UserContext())
-	if server, ok := ftx.Locals("server").(*Server); ok && server.metrics != nil {
-		defer func() {
-			if err == nil {
-				server.metrics.EntryRequestsTotal.WithLabelValues("rest", "ok", clientID).Inc()
-			}
-		}()
-	}
-	var request requestTodoServiceToggle
-
-	if _id_ := ftx.Params("id"); _id_ != "" {
-		var id int64
-		if id, err = strconv.ParseInt(_id_, 10, 64); err != nil {
-			ftx.Status(fiber.StatusBadRequest)
-			return sendResponse(ftx, "path arguments could not be decoded: "+err.Error())
-		}
-		request.Id = id
-	}
-
-	var response responseTodoServiceToggle
-	if response, err = http.toggle(ftx.UserContext(), request); err == nil {
-		var iResponse any = response
-		if redirect, ok := iResponse.(withRedirect); ok {
-			return ftx.Redirect(redirect.RedirectTo())
-		}
-
-		return sendResponse(ftx, response.Todo)
 	}
 	var statusCode int
 	if errCoder, ok := err.(withErrorCode); ok {

@@ -1,6 +1,6 @@
-// Package storage defines the persistence boundary for todos.
-// SQL lives only in internal/storage/sqlite; the service depends on this
-// interface, never on database/sql.
+// Package storage defines the persistence boundary for todos and personal
+// cabinets (ЛК). SQL lives only in internal/storage/sqlite; the service depends
+// on these interfaces, never on database/sql.
 package storage
 
 import (
@@ -10,22 +10,60 @@ import (
 	"github.com/loki/todoservice/contracts/dto"
 )
 
-// ErrNotFound is returned when no todo exists for the requested id. The
-// repository maps sql.ErrNoRows to this sentinel; the HTTP layer maps it to 404.
+// ErrNotFound is returned when no todo exists for the requested id (or when a
+// todo exists but belongs to a different cabinet). The repository maps
+// sql.ErrNoRows to this sentinel; the HTTP layer maps it to 404.
 var ErrNotFound = errors.New("todo not found")
 
-// Repository is the storage contract the todo service depends on.
+// ErrProfileNotFound is returned when no personal cabinet exists for the
+// requested id. The HTTP layer maps it to 404.
+var ErrProfileNotFound = errors.New("personal profile not found")
+
+// Repository is the storage contract for todos. Todos are partitioned by
+// cabinet (LkID): Create/List/Get are scoped to a cabinet so a request only
+// ever touches its own cabinet's records.
 type Repository interface {
-	// Create persists a new todo (ignoring any incoming ID) and returns it
-	// with the server-assigned ID.
+	// Create persists a new todo in the cabinet t.LkID and returns it with the
+	// server-assigned ID. The caller must set t.LkID (validated upstream).
 	Create(ctx context.Context, t dto.Todo) (dto.Todo, error)
-	// List returns every stored todo ordered by id.
-	List(ctx context.Context) ([]dto.Todo, error)
-	// Get returns a single todo by id, or ErrNotFound.
-	Get(ctx context.Context, id int64) (dto.Todo, error)
+	// List returns every todo that belongs to cabinet lkID, ordered by id.
+	List(ctx context.Context, lkID int64) ([]dto.Todo, error)
+	// Get returns a single todo by id, but only if it belongs to lkID; otherwise
+	// ErrNotFound. This is what makes x-lk-id an access-control key: a request
+	// for another cabinet's todo looks the same as a missing todo (404).
+	Get(ctx context.Context, lkID int64, id int64) (dto.Todo, error)
 	// Update overwrites the stored fields of the todo identified by t.ID.
 	// It returns ErrNotFound when the id does not exist.
 	Update(ctx context.Context, t dto.Todo) (dto.Todo, error)
 	// Delete removes a todo by id. Missing id returns ErrNotFound.
 	Delete(ctx context.Context, id int64) error
+	// GetByID returns a single todo by its global id, regardless of cabinet.
+	// Used by Update/Toggle which operate by global id (todos are globally
+	// unique) and therefore are not cabinet-scoped. Cabinet scoping applies to
+	// Create/List/Get only, per the x-lk-id contract.
+	GetByID(ctx context.Context, id int64) (dto.Todo, error)
+}
+
+// ProfileRepository is the storage contract for personal cabinets (ЛК).
+type ProfileRepository interface {
+	// CreateProfile persists a new cabinet and returns it with the
+	// server-assigned ID.
+	CreateProfile(ctx context.Context, p dto.PersonalProfile) (dto.PersonalProfile, error)
+	// ListProfiles returns every cabinet ordered by id.
+	ListProfiles(ctx context.Context) ([]dto.PersonalProfile, error)
+	// GetProfile returns a single cabinet by id, or ErrProfileNotFound.
+	GetProfile(ctx context.Context, id int64) (dto.PersonalProfile, error)
+	// UpdateProfile overwrites the stored name of the cabinet identified by p.ID.
+	// It returns ErrProfileNotFound when the id does not exist.
+	UpdateProfile(ctx context.Context, p dto.PersonalProfile) (dto.PersonalProfile, error)
+	// DeleteProfile removes a cabinet by id. Missing id returns ErrProfileNotFound.
+	DeleteProfile(ctx context.Context, id int64) error
+}
+
+// Store is the combined persistence contract the service depends on: todos
+// (cabinet-scoped) plus the cabinets themselves. The SQLite repository
+// implements both halves.
+type Store interface {
+	Repository
+	ProfileRepository
 }

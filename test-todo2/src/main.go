@@ -80,10 +80,12 @@ func run(log *slog.Logger) error {
 	}
 
 	svc := service.New(repo)
+	profileSvc := service.NewProfile(repo)
 
-	srv := transport.New(log, transport.TodoService(svc))
+	srv := transport.New(log, transport.TodoService(svc), transport.PersonalProfileService(profileSvc))
 	// Map domain errors to HTTP status codes with a sanitized body (no internals).
 	srv.TodoService().WithErrorHandler(service.HTTPError)
+	srv.PersonalProfileService().WithErrorHandler(service.HTTPError)
 
 	// Web UI: serve the vanilla-JS single page from the SAME fiber app that owns
 	// the generated transport (no second server). Registered AFTER the @tg
