@@ -1,0 +1,10 @@
+{
+  "name": "executing-plans",
+  "description": "",
+  "source": "obra/superpowers",
+  "sourceType": "github",
+  "subpath": "executing-plans",
+  "installedAt": "2026-08-06T09:03:25.701Z",
+  "enabled": true,
+  "checksum": "c4c3d8b628c51114"
+}
