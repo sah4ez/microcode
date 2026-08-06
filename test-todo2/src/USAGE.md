@@ -32,16 +32,26 @@ The server listens on `http://127.0.0.1:8000` and auto-creates `./data/todos.db`
 Run the server in one terminal, then:
 
 ```bash
-# 1) Create a todo -> expect HTTP/1.1 201 Created and a JSON body with id, created_at, completed:false
-curl -s -i -X POST http://127.0.0.1:8000/todos -H 'Content-Type: application/json' -d '{"title":"Buy milk","description":"2 liters"}'
+# 1) Create a cabinet (ЛК) -> 201
+curl -s -i -X POST http://127.0.0.1:8000/personal-profile -H 'Content-Type: application/json' -d '{"name":"работа"}'
 
-# 2) List -> expect HTTP/1.1 200 and {"todos":[ ... ]}
-curl -s -i http://127.0.0.1:8000/todos
+# 2) Create a todo in the cabinet -> 201
+curl -s -i -X POST http://127.0.0.1:8000/todos -H 'Content-Type: application/json' -H 'x-lk-id: 1' -d '{"title":"Buy milk","description":"2 liters"}'
 
-# 3) Persistence across restart: create a todo, stop the server (Ctrl+C),
-#    `go run main.go` again, then GET it -> it must still be present.
-curl -s http://127.0.0.1:8000/todos/1
+# 3) List todos for the cabinet -> 200
+curl -s -i http://127.0.0.1:8000/todos -H 'x-lk-id: 1'
+
+# 4) Open the web UI in a browser: http://127.0.0.1:8000
+#    The dropdown shows all cabinets; switching reloads todos for the selected cabinet.
 ```
+
+## Web UI
+
+The web UI at `http://127.0.0.1:8000` provides:
+- **Cabinet dropdown**: switch between personal cabinets (ЛК); todos reload on switch.
+- **Create cabinet**: inline form to add a new cabinet.
+- **Manage cabinets**: separate section to rename or delete cabinets.
+- **Todo CRUD**: create, edit, toggle, and delete todos scoped to the active cabinet.
 
 ## Stop
 

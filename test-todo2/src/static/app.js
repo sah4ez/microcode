@@ -11,6 +11,7 @@ const formEl = document.getElementById("create-form");
 const errorEl = document.getElementById("error");
 const lkSelectEl = document.getElementById("lk-select");
 const lkCreateFormEl = document.getElementById("lk-create-form");
+const cabinetMgmtListEl = document.getElementById("cabinet-mgmt-list");
 
 // activeLkId holds the currently selected cabinet id (sent as x-lk-id).
 // Persisted in localStorage so a page reload keeps the same cabinet.
@@ -166,6 +167,7 @@ async function refreshCabinets() {
     const data = await fetchJSON("/personal-profile");
     const profiles = Array.isArray(data.profiles) ? data.profiles : [];
     renderCabinets(profiles);
+    renderCabinetManagement(profiles);
     return profiles;
   } catch (err) {
     showError(err.message);
@@ -206,6 +208,110 @@ async function deleteTodo(id) {
 
 async function patchTodo(id, title, description) {
   await fetchJSON(`/todos/${id}`, asJSON("PATCH", { title, description }, true));
+  await refresh();
+}
+
+// renderCabinetManagement rebuilds the management list (rename/delete) from the
+// profile list. This is the separate interface for working with ЛК.
+function renderCabinetManagement(profiles) {
+  cabinetMgmtListEl.innerHTML = "";
+  if (!profiles || !profiles.length) {
+    const empty = document.createElement("li");
+    empty.className = "cabinet-management-empty";
+    empty.textContent = "No cabinets yet.";
+    cabinetMgmtListEl.append(empty);
+    return;
+  }
+  for (const p of profiles) {
+    const li = document.createElement("li");
+    li.dataset.id = String(p.id);
+
+    const info = document.createElement("div");
+    info.className = "cabinet-info";
+    info.innerHTML =
+      '<span class="cabinet-name">' + esc(p.name) + '</span>' +
+      '<span class="cabinet-id"> id=' + esc(String(p.id)) + '</span>';
+    li.append(info);
+
+    const actions = document.createElement("div");
+    actions.className = "cabinet-actions";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "secondary";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", () => startRenameCabinet(li, p));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => deleteCabinet(p.id));
+
+    actions.append(renameBtn, deleteBtn);
+    li.append(actions);
+    cabinetMgmtListEl.append(li);
+  }
+}
+
+// startRenameCabinet swaps the cabinet info into an inline rename form.
+function startRenameCabinet(li, p) {
+  li.innerHTML = "";
+  const form = document.createElement("form");
+  form.className = "lk-create";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "rename-input";
+  input.value = p.name;
+  input.required = true;
+
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.textContent = "Save";
+
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "secondary";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => {
+    refreshCabinets();
+  });
+
+  form.append(input, save, cancel);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await renameCabinet(p.id, input.value.trim());
+      showError("");
+    } catch (err) {
+      showError(err.message);
+    }
+  });
+  li.append(form);
+  input.focus();
+}
+
+async function renameCabinet(id, name) {
+  if (!name) return;
+  await fetchJSON(`/personal-profile/${id}`, asJSON("PATCH", { name }, false));
+  await refreshCabinets();
+}
+
+async function deleteCabinet(id) {
+  if (!confirm("Delete this cabinet and all its todos?")) return;
+  await fetchJSON(`/personal-profile/${id}`, { method: "DELETE" });
+  // If the deleted cabinet was active, switch to another or clear.
+  if (String(activeLkId) === String(id)) {
+    activeLkId = "";
+    localStorage.removeItem("activeLkId");
+  }
+  const profiles = await refreshCabinets();
+  if (profiles.length && !activeLkId) {
+    activeLkId = String(profiles[0].id);
+    lkSelectEl.value = String(activeLkId);
+    localStorage.setItem("activeLkId", String(activeLkId));
+  }
   await refresh();
 }
 
