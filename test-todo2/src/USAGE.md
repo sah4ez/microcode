@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - Go toolchain 1.26+ (`go version`).
+- Node.js 22+ (only for frontend tests: `node static/app.test.js`).
 - The `tg` CLI (Tool Gateway) with the `astg` and `server` plugins installed
   (`tg pkg list`). The environment's `tg pkg add` needs the download-race patch
   in `skills/tg-patch/`; a working patched binary is at `/home/loki/bin/tg`.
@@ -63,3 +64,20 @@ If backgrounded: `lsof -ti:8000 | xargs -r kill -TERM`.
 ```bash
 tg server -o internal/transport && go mod tidy && go vet ./... && go build ./...
 ```
+
+## Tests
+
+Backend (Go):
+
+```bash
+go test ./...
+```
+
+Frontend (Node.js, vanilla — no framework, no build step):
+
+```bash
+node static/app.test.js
+```
+
+Covers the cabinet (ЛК) UI logic: dropdown population, switching reloads todos
+via `x-lk-id`, cabinet create/rename/delete, and todo isolation per cabinet.

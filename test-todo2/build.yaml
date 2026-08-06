@@ -16,7 +16,7 @@
 #     │                  + translate → cline SKILL.md в skills/
 #     ├─ overlay модули: ./custom-skills → /workspace/skills (mount)
 #     ├─ sandbox:        msb create debian + bootstrap.sh (node/loki/cline/shim)
-#     └─ loki (in VM):   loki --provider cline --model glm-5.2 PRD.md
+#     └─ loki (in VM):   loki --provider cline --model glm-5-turbo PRD.md
 #                          читает skills/00-index.md (наш overlay)
 #                          → строит сервис в /workspace (виден на хосте как src/)
 #
@@ -67,7 +67,7 @@ skills:
 # ───────────────────────────────────────────────────────────────────────── #
 loki:
   provider: cline                    # loki вызывает cline CLI (node-shim в VM)
-  model: glm-5.2                     # модель z.ai (→ CLINE_MODEL + LOKI_MODEL_OVERRIDE)
+  model: glm-5-turbo                 # модель z.ai (→ CLINE_MODEL + LOKI_MODEL_OVERRIDE)
   max_iterations: 15
   max_budget_usd: 5.0
   effort: standard                   # 6 фаз SDLC (без DEEPEN_PLAN можно low)
@@ -258,9 +258,9 @@ sandbox:
         ' || true
     snapshot:
       # --- APPLY mode (active): boot from the pre-built snapshot ---
-      # from_snapshot: mcd-base
+      from_snapshot: mcd-base
       # --- BUILD mode: set enabled: true (and comment from_snapshot) to recapture ---
-      enabled: true
+      # enabled: true
       name: mcd-base
 
   mounts:
