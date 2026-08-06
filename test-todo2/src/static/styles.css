@@ -151,3 +151,111 @@ button.danger {
   padding: 1rem 0;
   text-align: center;
 }
+
+/* Cabinet (ЛК) selector and create form */
+.cabinet-card {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cabinet-card select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cabinet-card select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.cabinet-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.lk-create {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lk-create input[type="text"] {
+  flex: 1;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+/* Separate cabinet management section */
+.cabinet-management {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.cabinet-management h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
+
+.cabinet-management-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cabinet-management-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+
+.cabinet-management-list li .cabinet-info {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.cabinet-management-list li .cabinet-info .cabinet-id {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.cabinet-management-list li .cabinet-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.cabinet-management-list li .cabinet-actions button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.cabinet-management-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+.rename-input {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}

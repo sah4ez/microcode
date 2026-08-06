@@ -1,7 +1,7 @@
 # Todo Service (Go + tg v3)
 
-A minimal todo-list REST API. Refactored to Go on top of
-[`github.com/seniorGolang/tg/v3`](https://github.com/seniorGolang/tg) +
+A minimal todo-list REST API with multi-cabinet (ЛК) support. Refactored to Go on
+top of [`github.com/seniorGolang/tg/v3`](https://github.com/seniorGolang/tg) +
 [go-fiber](https://gofiber.io), with todos persisted to a local SQLite file.
 
 > **HTTP transport is generated, not hand-written.** The fiber routes/handlers
@@ -9,6 +9,16 @@ A minimal todo-list REST API. Refactored to Go on top of
 > from the `// @tg` contract in [`contracts/`](contracts/). Only the business
 > logic ([`internal/service`](internal/service)) and the SQLite repository
 > ([`internal/storage/sqlite`](internal/storage/sqlite)) are hand-written.
+
+## Features
+
+- **Personal cabinets (ЛК)**: create multiple cabinets; each owns an
+  independent todo list. Switch between them via the web UI dropdown or the
+  `x-lk-id` request header.
+- **Web UI**: vanilla-JS single page at `/` with cabinet switching, create,
+  rename, delete, and full todo CRUD scoped to the active cabinet.
+- **Cabinet isolation**: a todo request with `x-lk-id=1` never sees cabinet 2's
+  records; cross-cabinet GET returns 404.
 
 ## Requirements
 

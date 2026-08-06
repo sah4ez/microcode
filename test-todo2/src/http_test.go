@@ -363,3 +363,146 @@ func TestHTTP_personalProfile_crud(t *testing.T) {
 		t.Errorf("delete missing profile: want 404, got %d", code)
 	}
 }
+
+// TestHTTP_staticAssets verifies the embedded web UI serves the expected
+// HTML/CSS/JS with the cabinet-switching components (PRD-004 frontend gate).
+func TestHTTP_staticAssets(t *testing.T) {
+	app, closeFn := bootApp(t, filepath.Join(t.TempDir(), "todos.db"))
+	defer closeFn()
+
+	// GET / → index.html with cabinet dropdown; verify raw HTML content.
+	req := httptest.NewRequest(fiber.MethodGet, "/", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	s := string(raw)
+
+	for _, needle := range []string{
+		`id="lk-select"`,         // cabinet dropdown
+		`id="lk-create-form"`,     // create form
+		`id="cabinet-mgmt-list"`, // management list
+		`cabinet-management`,      // separate ЛК management section
+		`cabinet-card`,           // cabinet card class
+		`cabinet-label`,          // cabinet label class
+		`lk-create`,              // create form class
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("index.html missing: %s", needle)
+		}
+	}
+}
+
+// TestHTTP_stylesCSS verifies styles.css contains the cabinet-specific classes.
+func TestHTTP_stylesCSS(t *testing.T) {
+	app, closeFn := bootApp(t, filepath.Join(t.TempDir(), "todos.db"))
+	defer closeFn()
+
+	req := httptest.NewRequest(fiber.MethodGet, "/styles.css", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("GET /styles.css: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	s := string(raw)
+
+	for _, needle := range []string{
+		".cabinet-card",
+		".cabinet-label",
+		".lk-create",
+		".cabinet-management",
+		".cabinet-management-list",
+		".rename-input",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("styles.css missing: %s", needle)
+		}
+	}
+}
+
+// TestHTTP_appJS verifies app.js contains the cabinet-switching functions.
+func TestHTTP_appJS(t *testing.T) {
+	app, closeFn := bootApp(t, filepath.Join(t.TempDir(), "todos.db"))
+	defer closeFn()
+
+	req := httptest.NewRequest(fiber.MethodGet, "/app.js", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("GET /app.js: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	s := string(raw)
+
+	for _, needle := range []string{
+		"refreshCabinets",
+		"createCabinet",
+		"deleteCabinet",
+		"renameCabinet",
+		"renderCabinetManagement",
+		"x-lk-id",
+		"renderCabinets",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("app.js missing: %s", needle)
+		}
+	}
+}
+
+// TestHTTP_frontendE2E verifies the full cabinet switching workflow:
+// create two cabinets, create todos in each, switch between them, verify
+// isolation (PRD-004: "при переключении между лк должны перезагружаться все
+// доступные записи").
+func TestHTTP_frontendE2E(t *testing.T) {
+	app, closeFn := bootApp(t, filepath.Join(t.TempDir(), "todos.db"))
+	defer closeFn()
+
+	// Create two cabinets
+	lkWork := makeProfile(t, app, "работа")
+	lkHome := makeProfile(t, app, "дом")
+
+	// Create todos in each cabinet
+	requestH(t, app, fiber.MethodPost, "/todos", `{"title":"task1"}`, lkHeaders(lkWork))
+	requestH(t, app, fiber.MethodPost, "/todos", `{"title":"task2"}`, lkHeaders(lkWork))
+	_, homeBody := requestH(t, app, fiber.MethodPost, "/todos", `{"title":"home1"}`, lkHeaders(lkHome))
+	homeID := idStr(homeBody["id"])
+
+	// Switch to "работа" → 2 todos
+	code, body := requestH(t, app, fiber.MethodGet, "/todos", "", lkHeaders(lkWork))
+	if code != 200 {
+		t.Fatalf("list работа: want 200, got %d", code)
+	}
+	workTodos, _ := body["todos"].([]any)
+	if len(workTodos) != 2 {
+		t.Fatalf("работа list: want 2, got %d", len(workTodos))
+	}
+
+	// Switch to "дом" → 1 todo
+	code, body = requestH(t, app, fiber.MethodGet, "/todos", "", lkHeaders(lkHome))
+	if code != 200 {
+		t.Fatalf("list дом: want 200, got %d", code)
+	}
+	homeTodos, _ := body["todos"].([]any)
+	if len(homeTodos) != 1 {
+		t.Fatalf("дом list: want 1, got %d", len(homeTodos))
+	}
+
+	// Cross-cabinet access is denied (404)
+	if code, _ = requestH(t, app, fiber.MethodGet, "/todos/"+homeID, "", lkHeaders(lkWork)); code != 404 {
+		t.Errorf("cross-cabinet get: want 404, got %d", code)
+	}
+
+	// Rename a cabinet
+	code, body = request(t, app, fiber.MethodPatch, "/personal-profile/"+lkHome, `{"name":"house"}`)
+	if code != 200 || body["name"] != "house" {
+		t.Fatalf("rename cabinet: want 200 + house, got %d %v", code, body)
+	}
+
+	// Delete a cabinet, verify todos become inaccessible
+	if code, _ = request(t, app, fiber.MethodDelete, "/personal-profile/"+lkWork, ""); code != 204 {
+		t.Fatalf("delete cabinet: want 204, got %d", code)
+	}
+	if code, _ = requestH(t, app, fiber.MethodGet, "/todos", "", lkHeaders(lkWork)); code != 400 {
+		t.Errorf("list after cabinet delete: want 400 (cabinet gone), got %d", code)
+	}
+}
