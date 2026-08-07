@@ -45,6 +45,7 @@ seed named volumes → skillkit install → loki start`. You normally do NOT cal
 | `microcode steer [file] "msg"` | async directive into a RUNNING loki |
 | `microcode status [file]` | phase / commits / workspace in the VM |
 | `microcode rollback [file] --to HASH` | reset the VM workspace to a checkpoint |
+| `microcode sync [file] [-s merge]` | pull loki's VM commits back to the host repo |
 | `microcode destroy [file]` | stop VM + clean state |
 
 Always `validate` then `plan --dry-run` before `apply`. The plan preview catches

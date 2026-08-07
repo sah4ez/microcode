@@ -109,16 +109,40 @@ uses the bind mount (build) / tar-seed (apply) as before.
 
 ## Pulling loki's result onto the host
 
+The preferred way is the `microcode sync` command — it bundles the VM's
+commits (`origin/{branch}..HEAD`) via `git bundle`, copies the bundle to the
+host with `msb cp`, fetches it, and cherry-picks the commits onto the current
+host branch (or merges with `-s merge`):
+
 ```bash
-# The VM's git-daemon is forwarded to host localhost:9418.
-git fetch git://localhost:9418/ vm/<sandbox-name>
-git log FETCH_HEAD --oneline          # inspect what loki did
-git merge FETCH_HEAD                  # or cherry-pick specific commits
+microcode sync platform.yaml                 # cherry-pick (linear history)
+microcode sync platform.yaml -s merge        # merge commit instead
+microcode sync platform.yaml --dry-run       # preview the commands
+```
+
+This requires `sandbox.sync.enabled` (the VM workspace was git-cloned, not
+tar-seeded). It runs fully locally (no daemon needed), so it works even when
+the git-daemon isn't serving.
+
+If you need to inspect what loki did before applying, the bundle + fetch can be
+done manually:
+
+```bash
+msb exec <name> --user loki -- bash -c \
+  'cd /workspace && git bundle create /tmp/vm.bundle origin/master..HEAD'
+msb cp <name>:/tmp/vm.bundle /tmp/vm.bundle
+git fetch /tmp/vm.bundle 'HEAD:refs/heads/from-vm/sync'
+git log from-vm/sync --oneline              # inspect before applying
+git cherry-pick $(git merge-base HEAD from-vm/sync)..from-vm/sync
 ```
 
 No `msb cp`, no tar — pure git, with real history.
 
 ## If the daemon isn't serving (debug)
+
+`microcode sync` does NOT need the daemon (it uses `git bundle` + `msb cp`).
+This section is only for the alternative `git fetch git://localhost:9418/`
+flow.
 
 1. Is `/workspace` a git repo yet? The daemon refuses a non-repo path. Init or
    clone first: `git -C /workspace rev-parse --git-dir`.
