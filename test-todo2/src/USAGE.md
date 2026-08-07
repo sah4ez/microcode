@@ -8,11 +8,7 @@
   (`tg pkg list`). The environment's `tg pkg add` needs the download-race patch
   in `skills/tg-patch/`; a working patched binary is at `/home/loki/bin/tg`.
 - No external services (no database server). SQLite is an embedded file.
-- Port `8000` must be free. The server **binds `0.0.0.0:8000`** (all interfaces)
-  so msb port-forwarding works; clients connect to `http://127.0.0.1:8000`.
-- Env: Go module proxy. The `github.com/seniorGolang/tg/v3` module is not on the
-  public Go proxy, so use a direct fallback:
-  `go env -w GOPROXY=https://proxy.golang.org,direct GOSUMDB=off`.
+- Port `8000` must be free. The server binds `0.0.0.0:8000`.
 
 ## Install
 
@@ -33,17 +29,17 @@ The server listens on `http://127.0.0.1:8000` and auto-creates `./data/todos.db`
 Run the server in one terminal, then:
 
 ```bash
-# 1) Create a cabinet (ЛК) -> 201
-curl -s -i -X POST http://127.0.0.1:8000/personal-profile -H 'Content-Type: application/json' -d '{"name":"работа"}'
+# 1) Create a personal cabinet (ЛК) -> expect 201 with id and name
+curl -s -i -X POST http://127.0.0.1:8000/personal-profile \
+  -H 'Content-Type: application/json' -d '{"name":"Work"}'
 
-# 2) Create a todo in the cabinet -> 201
-curl -s -i -X POST http://127.0.0.1:8000/todos -H 'Content-Type: application/json' -H 'x-lk-id: 1' -d '{"title":"Buy milk","description":"2 liters"}'
+# 2) Create a todo in that cabinet (x-lk-id = 1) -> expect 201
+curl -s -i -X POST http://127.0.0.1:8000/todos \
+  -H 'Content-Type: application/json' -H 'x-lk-id: 1' \
+  -d '{"title":"Buy milk","description":"2 liters"}'
 
-# 3) List todos for the cabinet -> 200
-curl -s -i http://127.0.0.1:8000/todos -H 'x-lk-id: 1'
-
-# 4) Open the web UI in a browser: http://127.0.0.1:8000
-#    The dropdown shows all cabinets; switching reloads todos for the selected cabinet.
+# 3) List todos in cabinet 1 -> expect 200 {"todos":[ ... ]}
+curl -s -i -H 'x-lk-id: 1' http://127.0.0.1:8000/todos
 ```
 
 ## Web UI
