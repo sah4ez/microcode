@@ -151,3 +151,48 @@ button.danger {
   padding: 1rem 0;
   text-align: center;
 }
+
+/* --- Cabinet (ЛК) selector --- */
+
+.cabinet-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cabinet-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-right: 0.25rem;
+}
+
+#lk-select {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--card);
+  color: var(--text);
+  min-width: 140px;
+  cursor: pointer;
+}
+
+#lk-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.lk-create {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.lk-create input[type="text"] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  width: 160px;
+}
