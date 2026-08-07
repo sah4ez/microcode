@@ -1,0 +1,10 @@
+{
+  "name": "verification-before-completion",
+  "description": "",
+  "source": "obra/superpowers",
+  "sourceType": "github",
+  "subpath": "verification-before-completion",
+  "installedAt": "2026-08-07T09:32:21.136Z",
+  "enabled": true,
+  "checksum": "2befe7fc55bcadaa"
+}
