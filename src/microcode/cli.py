@@ -359,6 +359,39 @@ def doctor_cmd():
         raise typer.Exit(code=1)
 
 
+@app.command()
+def sync(
+    file: str = typer.Argument(None, help="path to platform.yaml"),
+    strategy: str = typer.Option(
+        "cherry-pick", "--strategy", "-s",
+        help="how to apply VM commits: cherry-pick (linear, default) or merge",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="print the commands without running them"
+    ),
+):
+    """Pull loki's workspace commits from the VM back into the host repository.
+
+    Requires ``sandbox.sync.enabled`` (the VM workspace must have been cloned
+    from a git remote, not tar-seeded). Bundles the commits the VM has ahead of
+    the cloned base branch into a git bundle, copies it to the host, and applies
+    them onto the current branch via cherry-pick (default) or merge.
+    """
+    from microcode.sync import sync_from_vm
+
+    path, m = _load(file)
+    if strategy not in ("cherry-pick", "merge"):
+        logging_utils.error(
+            f"unknown strategy: {strategy} (use cherry-pick or merge)"
+        )
+        raise typer.Exit(code=1)
+    try:
+        sync_from_vm(m, path.parent, strategy=strategy, dry_run=dry_run)
+    except MicrocodeError as e:
+        logging_utils.error(str(e))
+        raise typer.Exit(code=1)
+
+
 @app.callback(invoke_without_command=True)
 def _root(
     ctx: typer.Context,
