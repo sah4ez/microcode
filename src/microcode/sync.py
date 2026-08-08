@@ -89,8 +89,13 @@ def build_host_fetch_argv(bundle_host: str) -> list[str]:
 
     Fetches the bundle's HEAD under the :data:`VM_REF` namespace so the VM
     branch name (a generated session id) doesn't pollute the host refs.
+
+    The refspec is force-updated (``+`` prefix) so a re-run of sync after a
+    previous run doesn't fail with ``non-fast-forward`` — the bundle's tip is
+    always a fresh VM branch tip, and :data:`VM_REF` is a throwaway local ref
+    only ``microcode sync`` uses (it's never pushed or merged directly).
     """
-    return ["git", "fetch", bundle_host, f"HEAD:refs/heads/{VM_REF}"]
+    return ["git", "fetch", bundle_host, f"+HEAD:refs/heads/{VM_REF}"]
 
 
 def build_host_apply_argv(

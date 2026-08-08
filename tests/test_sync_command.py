@@ -145,4 +145,5 @@ def test_build_host_apply_argv_merge_strategy():
 def test_build_host_apply_argv_fetch_uses_head_ref():
     cmds = build_host_apply_argv("/tmp/s.bundle", "/repo")
     fetch = cmds[0]
-    assert "HEAD:refs/heads/from-vm/sync" in fetch
+    # force-fetch (+ prefix) so re-running sync doesn't hit non-fast-forward
+    assert "+HEAD:refs/heads/from-vm/sync" in fetch
