@@ -70,7 +70,7 @@ loki:
   model: glm-5-turbo                 # модель z.ai (→ CLINE_MODEL + LOKI_MODEL_OVERRIDE)
   max_iterations: 15
   max_budget_usd: 5.0
-  effort: standard                   # 6 фаз SDLC (без DEEPEN_PLAN можно low)
+  effort: low                        # минимум SDLC-фаз = короче промпт = меньше риск Prompt exceeds max length
   # dashboard отключён: он ставит fastapi/uvicorn/sqlalchemy/aiosqlite из PyPI,
   # а pypi.org/files.pythonhosted.org нужно добавлять в allowlist + пересобирать
   # snapshot. RARV-цикл идёт и без web-UI; прогресс — `microcode status`.
