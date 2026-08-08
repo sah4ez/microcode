@@ -21,12 +21,6 @@ const (
 	metricMethodUserServiceCsrf     = "csrf"
 )
 
-const (
-	metricSuccessTrue       = "true"
-	metricSuccessFalse      = "false"
-	metricErrCodeSuccess    = "200"
-)
-
 type metricsUserService struct {
 	next    contracts.UserService
 	metrics *Metrics

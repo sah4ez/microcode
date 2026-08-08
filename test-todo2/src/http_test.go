@@ -17,6 +17,7 @@ import (
 	"github.com/loki/todoservice/internal/service"
 	"github.com/loki/todoservice/internal/storage/sqlite"
 	"github.com/loki/todoservice/internal/transport"
+	"github.com/loki/todoservice/internal/web"
 
 	_ "modernc.org/sqlite"
 )
@@ -41,6 +42,8 @@ func bootAppWithAuth(t *testing.T, dbPath string) (*fiber.App, func()) {
 	profileSvc := service.NewProfile(repo)
 	authSvc := service.NewAuth(repo)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Create transport to get the HTTP service handlers.
 	srv := transport.New(log,
 		transport.UserService(authSvc),
 		transport.TodoService(todoSvc),
@@ -49,8 +52,25 @@ func bootAppWithAuth(t *testing.T, dbPath string) (*fiber.App, func()) {
 	srv.UserService().WithErrorHandler(service.HTTPError)
 	srv.TodoService().WithErrorHandler(service.HTTPError)
 	srv.PersonalProfileService().WithErrorHandler(service.HTTPError)
-	srv.Fiber().Use(service.AuthMiddleware())
-	return srv.Fiber(), func() {
+
+	// In fiber v2, Use() middleware wraps routes registered AFTER it.
+	// The generated transport registers routes during New(), so we must
+	// re-register them on a new app with the auth middleware first.
+	app := fiber.New(fiber.Config{
+		BodyLimit:                    8 * 1024 * 1024,
+		Concurrency:                  256 * 1024,
+		DisablePreParseMultipartForm: true,
+		DisableStartupMessage:        true,
+		StreamRequestBody:            true,
+	})
+	app.Use(service.AuthMiddleware())
+	srv.UserService().SetRoutes(app)
+	srv.TodoService().SetRoutes(app)
+	srv.PersonalProfileService().SetRoutes(app)
+	// Static files
+	web.Register(app, staticFS)
+	return app, func() {
+		_ = app.Shutdown()
 		_ = srv.Shutdown()
 		_ = db.Close()
 	}
@@ -454,9 +474,9 @@ func TestHTTP_staticAssets(t *testing.T) {
 
 	for _, needle := range []string{
 		`id="lk-select"`,         // cabinet dropdown
-		`id="lk-create-form"`,     // create form
+		`id="lk-create-form"`,    // create form
 		`id="cabinet-mgmt-list"`, // management list
-		`cabinet-management`,      // separate ЛК management section
+		`cabinet-management`,     // separate ЛК management section
 		`cabinet-card`,           // cabinet card class
 		`cabinet-label`,          // cabinet label class
 		`lk-create`,              // create form class
