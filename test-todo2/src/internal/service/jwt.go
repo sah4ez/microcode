@@ -12,7 +12,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/loki/todoservice/contracts/dto"
-	"github.com/loki/todoservice/internal/storage"
 )
 
 // JWT config from environment.

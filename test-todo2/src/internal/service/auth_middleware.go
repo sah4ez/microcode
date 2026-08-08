@@ -43,7 +43,14 @@ func AuthMiddleware() fiber.Handler {
 }
 
 func isProtectedRoute(path string) bool {
-	return strings.HasPrefix(path, "/todos") || strings.HasPrefix(path, "/personal-profile")
+	if strings.HasPrefix(path, "/todos") || strings.HasPrefix(path, "/personal-profile") {
+		return true
+	}
+	// /auth/me requires a valid access token to identify the caller.
+	if path == "/auth/me" {
+		return true
+	}
+	return false
 }
 
 // CSRFMiddleware validates the CSRF token from X-CSRF-Token header against

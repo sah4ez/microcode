@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (no CGO), registers "sqlite"
 
 	"github.com/loki/todoservice/internal/service"
@@ -89,22 +90,38 @@ func run(log *slog.Logger) error {
 	srv.TodoService().WithErrorHandler(service.HTTPError)
 	srv.PersonalProfileService().WithErrorHandler(service.HTTPError)
 
-	// Auth middleware: protects /todos and /personal-profile (returns 401).
-	// /auth/* routes are public (login, register, refresh, me, csrf).
-	srv.Fiber().Use(service.AuthMiddleware())
+	// Auth middleware: In fiber v2, Use() wraps routes registered AFTER it.
+	// The generated transport already registered routes in New(), so we
+	// re-register them on the fiber app with auth middleware first.
+	app := fiber.New(fiber.Config{
+		BodyLimit:                    8 * 1024 * 1024,
+		Concurrency:                  256 * 1024,
+		DisablePreParseMultipartForm: true,
+		DisableStartupMessage:        true,
+		IdleTimeout:                  120 * time.Second,
+		ReadBufferSize:               4096,
+		ReadTimeout:                  30 * time.Second,
+		StreamRequestBody:            true,
+		WriteBufferSize:              4096,
+		WriteTimeout:                 30 * time.Second,
+	})
+	app.Use(service.AuthMiddleware())
+	srv.UserService().SetRoutes(app)
+	srv.TodoService().SetRoutes(app)
+	srv.PersonalProfileService().SetRoutes(app)
 
 	// Web UI: serve the vanilla-JS single page from the SAME fiber app that owns
 	// the generated transport (no second server). Registered AFTER the @tg
 	// contract routes so /todos... always wins and the three asset paths fall
 	// through to the static files.
-	web.Register(srv.Fiber(), staticFS)
+	web.Register(app, staticFS)
 
 	// Serve until interrupted. Listen blocks, so run it in a goroutine and
 	// surface a startup failure via errCh.
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("todo service listening", slog.String("addr", "http://"+addr))
-		if err := srv.Fiber().Listen(addr); err != nil {
+		if err := app.Listen(addr); err != nil {
 			errCh <- err
 		}
 	}()
@@ -122,6 +139,9 @@ func run(log *slog.Logger) error {
 	// Graceful shutdown: stop accepting connections and finish in-flight
 	// requests (the generated transport caps this at 30s), then the deferred
 	// db.Close() runs as run() returns.
+	if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
+		return errors.Join(errors.New("shutdown"), err)
+	}
 	if err := srv.Shutdown(); err != nil {
 		return errors.Join(errors.New("shutdown"), err)
 	}

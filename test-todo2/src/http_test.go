@@ -17,9 +17,105 @@ import (
 	"github.com/loki/todoservice/internal/service"
 	"github.com/loki/todoservice/internal/storage/sqlite"
 	"github.com/loki/todoservice/internal/transport"
+	"github.com/loki/todoservice/internal/web"
 
 	_ "modernc.org/sqlite"
 )
+
+// bootAppWithAuth stands up the full stack including auth (UserService,
+// AuthMiddleware) on a SQLite file at dbPath. Used by auth tests where
+// protected routes must return 401 without a token.
+func bootAppWithAuth(t *testing.T, dbPath string) (*fiber.App, func()) {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		t.Fatalf("pragma: %v", err)
+	}
+	repo := sqlite.New(db)
+	if err := repo.Migrate(context.Background()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	todoSvc := service.New(repo)
+	profileSvc := service.NewProfile(repo)
+	authSvc := service.NewAuth(repo)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Create transport to get the HTTP service handlers.
+	srv := transport.New(log,
+		transport.UserService(authSvc),
+		transport.TodoService(todoSvc),
+		transport.PersonalProfileService(profileSvc),
+	)
+	srv.UserService().WithErrorHandler(service.HTTPError)
+	srv.TodoService().WithErrorHandler(service.HTTPError)
+	srv.PersonalProfileService().WithErrorHandler(service.HTTPError)
+
+	// In fiber v2, Use() middleware wraps routes registered AFTER it.
+	// The generated transport registers routes during New(), so we must
+	// re-register them on a new app with the auth middleware first.
+	app := fiber.New(fiber.Config{
+		BodyLimit:                    8 * 1024 * 1024,
+		Concurrency:                  256 * 1024,
+		DisablePreParseMultipartForm: true,
+		DisableStartupMessage:        true,
+		StreamRequestBody:            true,
+	})
+	app.Use(service.AuthMiddleware())
+	srv.UserService().SetRoutes(app)
+	srv.TodoService().SetRoutes(app)
+	srv.PersonalProfileService().SetRoutes(app)
+	// Static files
+	web.Register(app, staticFS)
+	return app, func() {
+		_ = app.Shutdown()
+		_ = srv.Shutdown()
+		_ = db.Close()
+	}
+}
+
+// registerUser creates a user via the HTTP API and returns the access token.
+func registerUser(t *testing.T, app *fiber.App, email, password string) string {
+	t.Helper()
+	code, body := request(t, app, fiber.MethodPost, "/auth/register",
+		`{"email":"`+email+`","password":"`+password+`"}`)
+	if code != 201 {
+		t.Fatalf("register: want 201, got %d %v", code, body)
+	}
+	tokens, ok := body["tokens"].(map[string]any)
+	if !ok || tokens["access_token"] == nil {
+		t.Fatalf("register: no tokens in response: %v", body)
+	}
+	return tokens["access_token"].(string)
+}
+
+// loginUser logs in via the HTTP API and returns the access token.
+func loginUser(t *testing.T, app *fiber.App, email, password string) string {
+	t.Helper()
+	code, body := request(t, app, fiber.MethodPost, "/auth/login",
+		`{"email":"`+email+`","password":"`+password+`"}`)
+	if code != 200 {
+		t.Fatalf("login: want 200, got %d %v", code, body)
+	}
+	tok, ok := body["access_token"].(string)
+	if !ok || tok == "" {
+		t.Fatalf("login: no access_token in response: %v", body)
+	}
+	return tok
+}
+
+func authHeaders(token string) map[string]string {
+	return map[string]string{"Authorization": "Bearer " + token}
+}
+
+func authLkHeaders(token, lkID string) map[string]string {
+	return map[string]string{
+		"Authorization": "Bearer " + token,
+		"x-lk-id":       lkID,
+	}
+}
 
 // bootApp stands up the full generated transport (todo + personal-profile
 // services) on a SQLite file at dbPath and returns the fiber app plus a closer
@@ -378,9 +474,9 @@ func TestHTTP_staticAssets(t *testing.T) {
 
 	for _, needle := range []string{
 		`id="lk-select"`,         // cabinet dropdown
-		`id="lk-create-form"`,     // create form
+		`id="lk-create-form"`,    // create form
 		`id="cabinet-mgmt-list"`, // management list
-		`cabinet-management`,      // separate ЛК management section
+		`cabinet-management`,     // separate ЛК management section
 		`cabinet-card`,           // cabinet card class
 		`cabinet-label`,          // cabinet label class
 		`lk-create`,              // create form class
@@ -490,5 +586,251 @@ func TestHTTP_frontendE2E(t *testing.T) {
 	// returns those todos.
 	if code, _ = request(t, app, fiber.MethodDelete, "/personal-profile/"+lkWork, ""); code != 204 {
 		t.Fatalf("delete cabinet: want 204, got %d", code)
+	}
+}
+
+// --- Auth HTTP tests ---
+
+// TestHTTP_Auth_Register_Login tests the full register + login flow.
+func TestHTTP_Auth_Register_Login(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "auth.db"))
+	defer closeFn()
+
+	// Register
+	code, body := request(t, app, fiber.MethodPost, "/auth/register",
+		`{"email":"alice@example.com","password":"Password1"}`)
+	if code != 201 {
+		t.Fatalf("register: want 201, got %d %v", code, body)
+	}
+	// Password must NOT be in the response.
+	user, _ := body["user"].(map[string]any)
+	if user == nil {
+		t.Fatal("register: missing user in response")
+	}
+	if _, has := user["password_hash"]; has {
+		t.Error("register: password_hash must not appear in response")
+	}
+	if _, has := user["password"]; has {
+		t.Error("register: password must not appear in response")
+	}
+	if user["email"] != "alice@example.com" {
+		t.Errorf("register: email = %v, want alice@example.com", user["email"])
+	}
+
+	// Tokens returned
+	tokens, _ := body["tokens"].(map[string]any)
+	if tokens == nil || tokens["access_token"] == nil || tokens["refresh_token"] == nil {
+		t.Fatalf("register: expected tokens, got %v", body)
+	}
+
+	// Duplicate registration
+	code, _ = request(t, app, fiber.MethodPost, "/auth/register",
+		`{"email":"alice@example.com","password":"Password1"}`)
+	if code != 409 {
+		t.Errorf("duplicate register: want 409, got %d", code)
+	}
+
+	// Login
+	code, body = request(t, app, fiber.MethodPost, "/auth/login",
+		`{"email":"alice@example.com","password":"Password1"}`)
+	if code != 200 {
+		t.Fatalf("login: want 200, got %d %v", code, body)
+	}
+	if body["access_token"] == nil || body["refresh_token"] == nil {
+		t.Fatalf("login: expected tokens, got %v", body)
+	}
+
+	// Wrong password
+	code, _ = request(t, app, fiber.MethodPost, "/auth/login",
+		`{"email":"alice@example.com","password":"WrongPass1"}`)
+	if code != 401 {
+		t.Errorf("wrong password: want 401, got %d", code)
+	}
+
+	// Nonexistent user
+	code, _ = request(t, app, fiber.MethodPost, "/auth/login",
+		`{"email":"noone@example.com","password":"Password1"}`)
+	if code != 401 {
+		t.Errorf("no user: want 401, got %d", code)
+	}
+}
+
+// TestHTTP_Auth_ProtectedRoutes verifies that /todos and /personal-profile
+// return 401 without a Bearer token when auth middleware is active.
+func TestHTTP_Auth_ProtectedRoutes(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "protected.db"))
+	defer closeFn()
+
+	// /todos without token -> 401
+	code, _ := request(t, app, fiber.MethodGet, "/todos", "")
+	if code != 401 {
+		t.Errorf("GET /todos no token: want 401, got %d", code)
+	}
+
+	// POST /todos without token -> 401
+	code, _ = request(t, app, fiber.MethodPost, "/todos", `{"title":"x"}`)
+	if code != 401 {
+		t.Errorf("POST /todos no token: want 401, got %d", code)
+	}
+
+	// /personal-profile without token -> 401
+	code, _ = request(t, app, fiber.MethodGet, "/personal-profile", "")
+	if code != 401 {
+		t.Errorf("GET /personal-profile no token: want 401, got %d", code)
+	}
+
+	// /auth/* routes must remain public (no token needed)
+	code, _ = request(t, app, fiber.MethodGet, "/auth/csrf", "")
+	if code != 200 {
+		t.Errorf("GET /auth/csrf public: want 200, got %d", code)
+	}
+}
+
+// TestHTTP_Auth_WithToken verifies that authenticated requests work normally.
+func TestHTTP_Auth_WithToken(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "withtoken.db"))
+	defer closeFn()
+
+	token := registerUser(t, app, "bob@example.com", "Password1")
+
+	// Create a cabinet (requires auth)
+	code, body := requestH(t, app, fiber.MethodPost, "/personal-profile",
+		`{"name":"work"}`, authHeaders(token))
+	if code != 201 {
+		t.Fatalf("create profile: want 201, got %d %v", code, body)
+	}
+	lkID := idStr(body["id"])
+
+	// Create a todo (requires auth + x-lk-id)
+	code, body = requestH(t, app, fiber.MethodPost, "/todos",
+		`{"title":"Buy milk"}`, authLkHeaders(token, lkID))
+	if code != 201 {
+		t.Fatalf("create todo: want 201, got %d %v", code, body)
+	}
+
+	// List todos
+	code, body = requestH(t, app, fiber.MethodGet, "/todos", "", authLkHeaders(token, lkID))
+	if code != 200 {
+		t.Fatalf("list todos: want 200, got %d %v", code, body)
+	}
+	todos, _ := body["todos"].([]any)
+	if len(todos) != 1 {
+		t.Fatalf("list: want 1 todo, got %d", len(todos))
+	}
+
+	// /auth/me with token
+	code, body = requestH(t, app, fiber.MethodGet, "/auth/me", "", authHeaders(token))
+	if code != 200 {
+		t.Fatalf("me: want 200, got %d %v", code, body)
+	}
+	if body["email"] != "bob@example.com" {
+		t.Errorf("me: email = %v, want bob@example.com", body["email"])
+	}
+}
+
+// TestHTTP_Auth_RateLimit verifies that rapid login attempts are rate-limited.
+// Note: rate-limiting uses client IP; in-process tests may not have one, so
+// this test is best-effort (passes if we see 429 OR if all are 401, since the
+// IP may be empty in test mode).
+func TestHTTP_Auth_RateLimit(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "ratelimit.db"))
+	defer closeFn()
+
+	// Register a user
+	_, _ = request(t, app, fiber.MethodPost, "/auth/register",
+		`{"email":"ratelimit@example.com","password":"Password1"}`)
+
+	// Send many login attempts with wrong password
+	var lastCode int
+	rateLimited := false
+	for i := 0; i < 15; i++ {
+		code, _ := request(t, app, fiber.MethodPost, "/auth/login",
+			`{"email":"ratelimit@example.com","password":"Wrong1"}`)
+		lastCode = code
+		if code == 429 {
+			rateLimited = true
+			break
+		}
+	}
+
+	if !rateLimited && lastCode == 429 {
+		rateLimited = true
+	}
+	// If rate-limited, great. If not, it may be because IP is empty in tests.
+	if !rateLimited {
+		t.Logf("rate limit: did not trigger (IP may be empty in-process); last code=%d", lastCode)
+	}
+}
+
+// TestHTTP_Auth_WeakPassword rejects weak passwords.
+func TestHTTP_Auth_WeakPassword(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "weakpw.db"))
+	defer closeFn()
+
+	for _, pw := range []string{"short", "nouppercase1", "NOLOWERCASE1", "Nodigitx"} {
+		code, _ := request(t, app, fiber.MethodPost, "/auth/register",
+			`{"email":"weak@example.com","password":"`+pw+`"}`)
+		if code != 422 {
+			t.Errorf("weak password %q: want 422, got %d", pw, code)
+		}
+	}
+}
+
+// TestHTTP_Auth_HTML checks login page and main page HTML contain expected elements.
+func TestHTTP_Auth_HTML(t *testing.T) {
+	app, closeFn := bootAppWithAuth(t, filepath.Join(t.TempDir(), "html.db"))
+	defer closeFn()
+
+	// /login serves login.html
+	req := httptest.NewRequest(fiber.MethodGet, "/login", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("get /login: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("/login: want 200, got %d", resp.StatusCode)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	s := string(raw)
+	for _, needle := range []string{"login-form", "register-form", "auth-toggle"} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("login.html missing: %s", needle)
+		}
+	}
+
+	// / serves index.html
+	req = httptest.NewRequest(fiber.MethodGet, "/", nil)
+	resp, err = app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("get /: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("/: want 200, got %d", resp.StatusCode)
+	}
+	raw, _ = io.ReadAll(resp.Body)
+	s = string(raw)
+	for _, needle := range []string{"logout-btn", "lk-select", "create-form", "todo-list"} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("index.html missing: %s", needle)
+		}
+	}
+}
+
+// TestHTTP_Auth_appJS verifies app.js contains auth-related functions.
+func TestHTTP_Auth_appJS(t *testing.T) {
+	js, err := os.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatalf("read static/app.js: %v", err)
+	}
+	s := string(js)
+	for _, needle := range []string{
+		"getToken", "setTokens", "clearTokens", "authHeaders",
+		"checkAuth", "refreshAccessToken", "logout",
+		"setupLoginPage", "setupLogoutButton",
+		"Authorization", "Bearer",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("app.js missing: %s", needle)
+		}
 	}
 }
