@@ -81,11 +81,17 @@ func run(log *slog.Logger) error {
 
 	svc := service.New(repo)
 	profileSvc := service.NewProfile(repo)
+	authSvc := service.NewAuth(repo)
 
-	srv := transport.New(log, transport.TodoService(svc), transport.PersonalProfileService(profileSvc))
+	srv := transport.New(log, transport.UserService(authSvc), transport.TodoService(svc), transport.PersonalProfileService(profileSvc))
 	// Map domain errors to HTTP status codes with a sanitized body (no internals).
+	srv.UserService().WithErrorHandler(service.HTTPError)
 	srv.TodoService().WithErrorHandler(service.HTTPError)
 	srv.PersonalProfileService().WithErrorHandler(service.HTTPError)
+
+	// Auth middleware: protects /todos and /personal-profile (returns 401).
+	// /auth/* routes are public (login, register, refresh, me, csrf).
+	srv.Fiber().Use(service.AuthMiddleware())
 
 	// Web UI: serve the vanilla-JS single page from the SAME fiber app that owns
 	// the generated transport (no second server). Registered AFTER the @tg

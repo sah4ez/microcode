@@ -60,10 +60,42 @@ type ProfileRepository interface {
 	DeleteProfile(ctx context.Context, id int64) error
 }
 
-// Store is the combined persistence contract the service depends on: todos
-// (cabinet-scoped) plus the cabinets themselves. The SQLite repository
-// implements both halves.
+// ErrUserNotFound is returned when no user exists for the requested id or email.
+// The HTTP layer maps it to 404.
+var ErrUserNotFound = errors.New("user not found")
+
+// ErrUserDeleted is returned when a user exists but has been soft-deleted.
+// The HTTP layer maps it to 403.
+var ErrUserDeleted = errors.New("user account is deleted")
+
+// ErrDuplicateEmail is returned when a registration attempts to use an email
+// already taken by an active (non-deleted) user. The HTTP layer maps it to 409.
+var ErrDuplicateEmail = errors.New("email already registered")
+
+// UserRepository is the storage contract for users.
+type UserRepository interface {
+	// CreateUser persists a new user and returns it with the server-assigned ID.
+	CreateUser(ctx context.Context, u UserRecord) (UserRecord, error)
+	// GetUserByID returns a user by id, or ErrUserNotFound.
+	GetUserByID(ctx context.Context, id int64) (UserRecord, error)
+	// GetUserByEmail returns a non-deleted user by email, or ErrUserNotFound.
+	GetUserByEmail(ctx context.Context, email string) (UserRecord, error)
+}
+
+// UserRecord is the full database row for a user (includes password hash).
+// It is never exposed to HTTP responses; only dto.User (without hash) is returned.
+type UserRecord struct {
+	ID        int64
+	Email     string
+	PasswordHash string
+	CreatedAt string
+	DeletedAt *string // nil = active, non-nil = soft-deleted
+}
+
+// Store is the combined persistence contract the service depends on: todos,
+// cabinets, and users.
 type Store interface {
 	Repository
 	ProfileRepository
+	UserRepository
 }

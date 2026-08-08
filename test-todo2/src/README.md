@@ -12,6 +12,9 @@ top of [`github.com/seniorGolang/tg/v3`](https://github.com/seniorGolang/tg) +
 
 ## Features
 
+- **User authentication**: JWT-based auth with registration, login, refresh token
+  rotation, and password validation (8+ chars, upper/lower/digit). All cabinet
+  and todo operations require a valid Bearer access token.
 - **Personal cabinets (ЛК)**: create multiple cabinets; each owns an
   independent todo list. Switch between them via the web UI dropdown or the
   `x-lk-id` request header.

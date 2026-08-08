@@ -115,6 +115,42 @@ const req3 = asJSON("PATCH", { name: "new" }, false);
 assertEqual(req3.method, "PATCH", "asJSON sets PATCH method");
 assertEqual(req3.body, '{"name":"new"}', "asJSON serializes PATCH body");
 
+// --- Test: authHeaders ---
+function authHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = "Bearer " + token;
+  }
+  return headers;
+}
+
+// --- Extract auth helpers for testing ---
+function getToken() {
+  return localStorage.getItem("access_token") || "";
+}
+
+// Test: authHeaders includes Bearer token when token exists
+globalThis.localStorage = {
+  getItem: (key) => key === "access_token" ? "test-token" : null,
+  setItem: () => {}, removeItem: () => {},
+};
+
+var ah1 = authHeaders({});
+assertEqual(ah1["Authorization"], "Bearer test-token", "authHeaders includes Bearer when token exists");
+
+var ah2 = authHeaders({"Content-Type": "application/json"});
+assertEqual(ah2["Authorization"], "Bearer test-token", "authHeaders includes Bearer with extra headers");
+assertEqual(ah2["Content-Type"], "application/json", "authHeaders merges extra headers");
+
+// Test: authHeaders omits Authorization when no token
+globalThis.localStorage = {
+  getItem: () => null,
+  setItem: () => {}, removeItem: () => {},
+};
+var ah3 = authHeaders({});
+assertEqual(ah3["Authorization"], undefined, "authHeaders omits Bearer when no token");
+
 // --- Report ---
 console.log(`\nFrontend tests: ${passed} passed, ${failed} failed`);
 if (errors.length) {

@@ -5,6 +5,70 @@
 // Cabinet (ЛК) support: a dropdown lists all personal-profile cabinets; the
 // active cabinet's id is sent as the `x-lk-id` header on every todo request.
 // Switching cabinets reloads the todo list for the newly selected cabinet.
+//
+// Auth support: access token in localStorage. All API requests include
+// Authorization: Bearer header. 401 redirects to /login.
+
+// --- Auth helpers ---
+function getToken() {
+  return localStorage.getItem("access_token") || "";
+}
+function getRefreshToken() {
+  return localStorage.getItem("refresh_token") || "";
+}
+function setTokens(access, refresh) {
+  localStorage.setItem("access_token", access);
+  localStorage.setItem("refresh_token", refresh);
+}
+function clearTokens() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("activeLkId");
+}
+
+// authHeaders builds headers with Bearer token.
+function authHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = "Bearer " + token;
+  }
+  return headers;
+}
+
+// checkAuth redirects to /login if no token is present.
+function checkAuth() {
+  if (!getToken() && window.location.pathname !== "/login") {
+    window.location.href = "/login";
+    return false;
+  }
+  return true;
+}
+
+// refreshAccessToken tries to get a new access token using the refresh token.
+async function refreshAccessToken() {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+  try {
+    const res = await fetch("/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    setTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// logout clears tokens and redirects to /login.
+function logout() {
+  clearTokens();
+  window.location.href = "/login";
+}
 
 const listEl = document.getElementById("todo-list");
 const formEl = document.getElementById("create-form");
@@ -27,8 +91,13 @@ function showError(message) {
   errorEl.textContent = message;
 }
 
-// fetchJSON wraps fetch with JSON parsing and error normalization.
+// fetchJSON wraps fetch with JSON parsing, auth headers, and error normalization.
+// On 401, attempts token refresh and retries once.
 async function fetchJSON(url, options = {}) {
+  // Inject auth headers if not already set.
+  if (!options.headers || !options.headers["Authorization"]) {
+    options.headers = authHeaders(options.headers || {});
+  }
   const res = await fetch(url, options);
   const ct = res.headers.get("content-type") || "";
   let body = null;
@@ -36,6 +105,20 @@ async function fetchJSON(url, options = {}) {
     body = await res.json();
   } else {
     body = await res.text();
+  }
+  // On 401, try refresh and retry once.
+  if (res.status === 401 && window.location.pathname !== "/login") {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      options.headers = authHeaders(options.headers || {});
+      const retry = await fetch(url, options);
+      if (retry.ok) {
+        const ct2 = retry.headers.get("content-type") || "";
+        return ct2.includes("application/json") ? await retry.json() : await retry.text();
+      }
+    }
+    logout();
+    throw new Error("session expired");
   }
   if (!res.ok) {
     const msg = (body && body.error) ? body.error : `Request failed (${res.status})`;
@@ -54,12 +137,12 @@ function lkHeaders(extra) {
   return headers;
 }
 
-// asJSON builds a JSON-body request, optionally carrying x-lk-id.
+// asJSON builds a JSON-body request, optionally carrying x-lk-id and auth.
 function asJSON(method, data, withLk) {
   const headers = { "Content-Type": "application/json" };
   return {
     method,
-    headers: withLk ? lkHeaders(headers) : headers,
+    headers: withLk ? authHeaders(lkHeaders(headers)) : authHeaders(headers),
     body: JSON.stringify(data),
   };
 }
@@ -407,8 +490,97 @@ formEl.addEventListener("submit", async (e) => {
   }
 });
 
-// Boot: load cabinets first, then todos for the active cabinet.
+// Boot: check auth, then load cabinets and todos. On /login page, set up forms.
 (async () => {
+  if (window.location.pathname === "/login") {
+    setupLoginPage();
+    return;
+  }
+  if (!checkAuth()) return;
+  setupLogoutButton();
   await refreshCabinets();
   await refresh();
 })();
+
+function setupLoginPage() {
+  const loginForm = document.getElementById("login-form");
+  const registerForm = document.getElementById("register-form");
+  const authToggle = document.getElementById("auth-toggle");
+  const authError = document.getElementById("auth-error");
+
+  // Toggle between login and register
+  authToggle.innerHTML = '<a href="#" id="toggle-link">Need an account? Register</a>';
+  document.getElementById("toggle-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    if (loginForm.hidden) {
+      loginForm.hidden = false;
+      registerForm.hidden = true;
+      document.getElementById("toggle-link").textContent = "Need an account? Register";
+    } else {
+      loginForm.hidden = true;
+      registerForm.hidden = false;
+      document.getElementById("toggle-link").textContent = "Already have an account? Sign in";
+    }
+    authError.hidden = true;
+  });
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+    if (!email || !password) { authError.textContent = "Email and password are required"; authError.hidden = false; return; }
+    try {
+      authError.hidden = true;
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Login failed");
+      setTokens(data.access_token, data.refresh_token);
+      window.location.href = "/";
+    } catch (err) {
+      authError.textContent = err.message;
+      authError.hidden = false;
+    }
+  });
+
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("reg-email").value.trim();
+    const password = document.getElementById("reg-password").value;
+    const confirm = document.getElementById("reg-confirm").value;
+    if (!email || !password) { authError.textContent = "Email and password are required"; authError.hidden = false; return; }
+    if (password !== confirm) { authError.textContent = "Passwords do not match"; authError.hidden = false; return; }
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      authError.textContent = "Password must be 8+ chars with uppercase, lowercase, and digit";
+      authError.hidden = false; return;
+    }
+    try {
+      authError.hidden = true;
+      const res = await fetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Registration failed");
+      setTokens(data.tokens.access_token, data.tokens.refresh_token);
+      window.location.href = "/";
+    } catch (err) {
+      authError.textContent = err.message;
+      authError.hidden = false;
+    }
+  });
+}
+
+function setupLogoutButton() {
+  const btn = document.getElementById("logout-btn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      clearTokens();
+      window.location.href = "/login";
+    });
+  }
+}

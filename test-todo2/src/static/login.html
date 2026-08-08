@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Todos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Todos</h1>
+
+    <section class="card auth-card">
+      <h2 id="auth-title">Sign In</h2>
+
+      <form id="login-form" class="auth-form">
+        <input id="login-email" name="email" type="email" placeholder="Email" autocomplete="email" required />
+        <input id="login-password" name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit">Sign In</button>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden>
+        <input id="reg-email" name="email" type="email" placeholder="Email" autocomplete="email" required />
+        <input id="reg-password" name="password" type="password" placeholder="Password (8+ chars, Aa1)" autocomplete="new-password" required />
+        <input id="reg-confirm" name="confirm" type="password" placeholder="Confirm password" autocomplete="new-password" required />
+        <button type="submit">Register</button>
+      </form>
+
+      <p id="auth-error" class="error" hidden></p>
+      <p id="auth-toggle" class="auth-toggle"></p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

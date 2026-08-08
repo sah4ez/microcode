@@ -35,6 +35,9 @@ func asset(c *fiber.Ctx, staticFS embed.FS, key, contentType string) error {
 // routes so /, /styles.css and /app.js fall through behind every /todos... API
 // route.
 func Register(app *fiber.App, staticFS embed.FS) {
+	app.Get("/login", func(c *fiber.Ctx) error {
+		return asset(c, staticFS, filepath.Join("static", "login.html"), "text/html; charset=utf-8")
+	})
 	app.Get("/", func(c *fiber.Ctx) error {
 		return asset(c, staticFS, filepath.Join("static", "index.html"), "text/html; charset=utf-8")
 	})

@@ -27,6 +27,15 @@ var ErrEmptyName = errors.New("name is required")
 // x-lk-id header is the access key that scopes a request to a single cabinet.
 var ErrMissingCabinet = errors.New("x-lk-id header is required")
 
+// ErrInvalidToken is returned when a JWT is missing, malformed, or expired.
+var ErrInvalidToken = errors.New("invalid or expired token")
+
+// ErrUnauthorized is returned when no Authorization header is present.
+var ErrUnauthorized = errors.New("authorization required")
+
+// ErrInvalidRefreshToken is returned when a refresh token is invalid or revoked.
+var ErrInvalidRefreshToken = errors.New("invalid or revoked refresh token")
+
 // APIError is a JSON-serializable application error carrying an HTTP status.
 // The generated transport sets the response status via Code() and encodes the
 // body — the exported Message field renders as {"error": "..."} and the
@@ -48,11 +57,9 @@ func NewAPIError(message string, code int) *APIError {
 }
 
 // HTTPError maps a domain error into an *APIError so the generated transport
-// can set the HTTP status and emit {"error": "..."}. Known domain errors map to
+// can set the HTTP status and emit {{"error": "..."}}. Known domain errors map to
 // their semantic codes; anything else collapses to an opaque 500 so internal
-// details (e.g. SQL text) never reach the client. Wire it via
-// `srv.TodoService().WithErrorHandler(service.HTTPError)` and
-// `srv.PersonalProfileService().WithErrorHandler(service.HTTPError)`.
+// details (e.g. SQL text) never reach the client.
 func HTTPError(err error) error {
 	switch {
 	case errors.Is(err, storage.ErrNotFound):
@@ -65,6 +72,30 @@ func HTTPError(err error) error {
 		return NewAPIError("name is required", http.StatusUnprocessableEntity)
 	case errors.Is(err, ErrMissingCabinet):
 		return NewAPIError("x-lk-id header is required", http.StatusBadRequest)
+	case errors.Is(err, ErrInvalidToken):
+		return NewAPIError("invalid or expired token", http.StatusUnauthorized)
+	case errors.Is(err, ErrUnauthorized):
+		return NewAPIError("authorization required", http.StatusUnauthorized)
+	case errors.Is(err, storage.ErrDuplicateEmail):
+		return NewAPIError("email already registered", http.StatusConflict)
+	case errors.Is(err, storage.ErrUserNotFound):
+		return NewAPIError("invalid email or password", http.StatusUnauthorized)
+	case errors.Is(err, storage.ErrUserDeleted):
+		return NewAPIError("user account is deleted", http.StatusForbidden)
+	case errors.Is(err, ErrWeakPassword):
+		return NewAPIError(err.Error(), http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrEmailRequired):
+		return NewAPIError("email is required", http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrPasswordRequired):
+		return NewAPIError("password is required", http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrInvalidEmail):
+		return NewAPIError("invalid email format", http.StatusUnprocessableEntity)
+	case errors.Is(err, ErrTooManyLoginAttempts):
+		return NewAPIError("too many login attempts", http.StatusTooManyRequests)
+	case errors.Is(err, ErrInvalidRefreshToken):
+		return NewAPIError("invalid or revoked refresh token", http.StatusUnauthorized)
+	case errors.Is(err, ErrInvalidCSRF):
+		return NewAPIError("invalid CSRF token", http.StatusForbidden)
 	default:
 		return NewAPIError("internal server error", http.StatusInternalServerError)
 	}

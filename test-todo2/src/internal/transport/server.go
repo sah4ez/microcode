@@ -26,6 +26,8 @@ type Server struct {
 
 	httpTodoService *httpTodoService
 
+	httpUserService *httpUserService
+
 	headerHandlers map[string]HeaderHandler
 }
 
@@ -111,6 +113,7 @@ func doesNotRequireHTTP(option Option) bool {
 	noHTTPService := testSrv.srvHTTP == nil
 	noHTTPService = noHTTPService && testSrv.httpPersonalProfileService == nil
 	noHTTPService = noHTTPService && testSrv.httpTodoService == nil
+	noHTTPService = noHTTPService && testSrv.httpUserService == nil
 	return noHTTPService
 }
 
@@ -241,4 +244,8 @@ func (srv *Server) PersonalProfileService() *httpPersonalProfileService {
 
 func (srv *Server) TodoService() *httpTodoService {
 	return srv.httpTodoService
+}
+
+func (srv *Server) UserService() *httpUserService {
+	return srv.httpUserService
 }

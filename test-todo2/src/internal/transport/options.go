@@ -116,3 +116,13 @@ func Use(args ...any) Option {
 		}
 	}
 }
+
+func UserService(svc contracts.UserService) Option {
+	return func(srv *Server) {
+		if srv.srvHTTP != nil {
+			httpSvc := newUserService(svc)
+			srv.httpUserService = httpSvc
+			httpSvc.SetRoutes(srv.Fiber())
+		}
+	}
+}

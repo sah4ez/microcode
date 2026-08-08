@@ -32,6 +32,9 @@ func New(db *sql.DB) *Repo {
 // scratch. An already-migrated table (lk_id present) is left untouched, so data
 // still survives a restart. personal_profiles is created if absent.
 func (r *Repo) Migrate(ctx context.Context) error {
+	if _, err := r.db.ExecContext(ctx, createUsersSQL); err != nil {
+		return fmt.Errorf("create users table: %w", err)
+	}
 	if _, err := r.db.ExecContext(ctx, createProfilesSQL); err != nil {
 		return fmt.Errorf("create personal_profiles table: %w", err)
 	}
@@ -60,6 +63,14 @@ func (r *Repo) Migrate(ctx context.Context) error {
 }
 
 const (
+	createUsersSQL = `CREATE TABLE IF NOT EXISTS users (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		email         TEXT    NOT NULL UNIQUE,
+		password_hash TEXT    NOT NULL,
+		created_at    TEXT    NOT NULL,
+		deleted_at    TEXT
+	);`
+
 	createProfilesSQL = `CREATE TABLE IF NOT EXISTS personal_profiles (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
 		name        TEXT    NOT NULL,
@@ -82,6 +93,9 @@ const (
 	deleteTodoSQL = `DELETE FROM todos WHERE id = ?`
 
 	insertProfileSQL = `INSERT INTO personal_profiles (name, created_at) VALUES (?, ?)`
+	insertUserSQL    = `INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)`
+	getUserByEmailSQL = `SELECT id, email, password_hash, created_at, deleted_at FROM users WHERE email = ? AND deleted_at IS NULL`
+	getUserByIDSQL   = `SELECT id, email, password_hash, created_at, deleted_at FROM users WHERE id = ?`
 	listProfileSQL   = `SELECT id, name, created_at FROM personal_profiles ORDER BY id`
 	getProfileSQL    = `SELECT id, name, created_at FROM personal_profiles WHERE id = ?`
 	updateProfileSQL = `UPDATE personal_profiles SET name = ?, created_at = ? WHERE id = ?`
@@ -330,4 +344,52 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// --- users ---
+
+// CreateUser persists u and returns it with the server-assigned ID.
+func (r *Repo) CreateUser(ctx context.Context, u storage.UserRecord) (storage.UserRecord, error) {
+	res, err := r.db.ExecContext(ctx, insertUserSQL, u.Email, u.PasswordHash, u.CreatedAt)
+	if err != nil {
+		return storage.UserRecord{}, fmt.Errorf("insert user: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return storage.UserRecord{}, fmt.Errorf("insert user id: %w", err)
+	}
+	u.ID = id
+	return u, nil
+}
+
+// GetUserByEmail returns a non-deleted user by email; sql.ErrNoRows → ErrUserNotFound.
+func (r *Repo) GetUserByEmail(ctx context.Context, email string) (storage.UserRecord, error) {
+	u, err := scanUser(r.db.QueryRowContext(ctx, getUserByEmailSQL, email))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return storage.UserRecord{}, storage.ErrUserNotFound
+		}
+		return storage.UserRecord{}, fmt.Errorf("query user by email %s: %w", email, err)
+	}
+	return u, nil
+}
+
+// GetUserByID returns a user by id (including deleted ones); sql.ErrNoRows → ErrUserNotFound.
+func (r *Repo) GetUserByID(ctx context.Context, id int64) (storage.UserRecord, error) {
+	u, err := scanUser(r.db.QueryRowContext(ctx, getUserByIDSQL, id))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return storage.UserRecord{}, storage.ErrUserNotFound
+		}
+		return storage.UserRecord{}, fmt.Errorf("query user %d: %w", id, err)
+	}
+	return u, nil
+}
+
+func scanUser(s scanner) (storage.UserRecord, error) {
+	var u storage.UserRecord
+	if err := s.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.DeletedAt); err != nil {
+		return storage.UserRecord{}, err
+	}
+	return u, nil
 }
